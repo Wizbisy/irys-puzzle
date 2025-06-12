@@ -194,7 +194,8 @@
     document.head.appendChild(fontLink);
 
     previewImage.onerror = () => {
-      alert(`Error: '${currentImage}' not found. Ensure images image1.png to image20.png are hosted.`);
+      console.error(`Error loading preview image: ${currentImage}`);
+      alert(`Error: '${currentImage}' not found. Ensure images image1.png to image20.png are in the root directory.`);
     };
 
     moveSound.onerror = () => {
@@ -260,25 +261,31 @@
 
     function setRandomImage() {
       const imageNumber = Math.floor(Math.random() * 20) + 1;
-      currentImage = `/image${imageNumber}.png`;
+      currentImage = `/image${imageNumber}.png`; // Images in root directory
       console.log('Attempting to load image:', currentImage);
       previewImage.src = currentImage;
       previewImage.onload = () => {
+        console.log('Image loaded successfully:', currentImage);
         setTileBackgrounds();
       };
       previewImage.onerror = () => {
-        console.error(`Failed to load ${currentImage}. Ensure images are in the root folder.`);
-        alert(`Error: '${currentImage}' not found. Ensure images image1.png to image20.png are hosted.`);
+        console.error(`Failed to load ${currentImage}. Ensure images are in the root directory.`);
+        alert(`Error: '${currentImage}' not found. Ensure images image1.png to image20.png are in the root directory.`);
       };
     }
 
     function setTileBackgrounds() {
+      if (!currentImage) {
+        console.warn('No currentImage set, skipping tile backgrounds.');
+        return;
+      }
       document.querySelectorAll('.tile:not(.empty)').forEach((tile, index) => {
         const row = Math.floor(index / size);
         const col = index % size;
         tile.style.backgroundImage = `url('${currentImage}')`;
         tile.style.backgroundSize = `${size * 100}% ${size * 100}%`;
         tile.style.backgroundPosition = `${(col * 100) / (size - 1)}% ${(row * 100) / (size - 1)}%`;
+        console.log(`Setting tile ${index} with image ${currentImage}`);
       });
     }
 
@@ -323,10 +330,10 @@
 
     function isSolvable() {
       let inversionCount = 0;
-      const flatTiles = tiles.map(tile => parseInt(tile.dataset.id));
+      const flatTiles = tiles.map(tile => parseInt(tile.dataset.id)); // Fixed typo: flatTls to flatTiles
       for (let i = 0; i < flatTiles.length - 1; i++) {
         for (let j = i + 1; j < flatTiles.length; j++) {
-          if (flatTls[i] && flatTiles[j] && flatTiles[i] > flatTiles[j]) {
+          if (flatTiles[i] && flatTiles[j] && flatTiles[i] > flatTiles[j]) {
             inversionCount++;
           }
         }
@@ -427,6 +434,7 @@
       isSolving = true;
       gameActive = false;
       allowWin = false;
+      // Reset tiles to solved state with current image
       tiles.forEach((tile, i) => {
         tile.dataset.id = i;
         tile.classList.remove('empty');
@@ -434,7 +442,13 @@
           tile.classList.add('empty');
         }
       });
-      setTileBackgrounds();
+      // Ensure currentImage is used and not overwritten
+      if (currentImage) {
+        setTileBackgrounds();
+      } else {
+        console.warn('No currentImage available, using default.');
+        setRandomImage(); // Fallback if image is missing
+      }
       render();
       clearInterval(timer);
       moves = 0;
