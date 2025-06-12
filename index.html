@@ -1,456 +1,316 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>IRyS Puzzle Mania</title>
-  <link rel="icon" href="favicon.png" type="image/png"/>
-
-  <meta property="og:title" content="IRyS Puzzle Mania" />
-  <meta property="og:description" content="Solve dazzling IRyS-themed puzzles!" />
-  <meta property="og:image" content="https://irys-puzzle.vercel.app/preview.jpg" />
-  <meta property="og:url" content="https://irys-puzzle.vercel.app/" />
-  <meta property="og:type" content="website" />
-  <meta name="twitter:card" content="summary_large_image" />
-
   <style>
     body {
-      background: linear-gradient(135deg, #2e004f, #ff4da6);
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: linear-gradient(to right, #6e00ff, #ff00c8);
+      color: white;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 20px;
-      font-family: 'Poppins', sans-serif;
-      color: #fff;
+      justify-content: center;
       min-height: 100vh;
-      margin: 0;
     }
 
     h1 {
-      font-size: 2.2rem;
-      text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-      margin: 10px 0;
+      font-size: 3em;
+      margin: 0.5em;
+      background: linear-gradient(to right, #ffffff, #ffb3ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
 
-    .preview {
-      width: 220px;
-      border-radius: 15px;
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
-      margin-bottom: 20px;
-      transition: transform 0.3s ease;
+    canvas {
+      border: 5px solid white;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+      margin-top: 1em;
     }
 
-    .preview:hover {
-      transform: scale(1.08);
-    }
-
-    .controls {
+    #controls {
+      margin-top: 1em;
       display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 20px;
-      background: rgba(0, 0, 0, 0.3);
-      padding: 20px;
-      border-radius: 15px;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+      flex-direction: column;
+      gap: 0.5em;
     }
 
-    .controls select, .controls button {
-      padding: 12px 24px;
+    button {
+      background-color: white;
+      color: #6e00ff;
       border: none;
-      border-radius: 10px;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-
-    .controls select {
-      background: #fff;
-      color: #2e004f;
-      font-weight: 500;
-    }
-
-    .controls button {
-      background: #ff4da6;
-      color: #fff;
+      padding: 0.7em 1.5em;
+      font-size: 1em;
       font-weight: bold;
+      border-radius: 0.5em;
+      cursor: pointer;
+      transition: transform 0.2s;
     }
 
-    .controls button:hover {
-      background: #e6008c;
-      transform: translateY(-3px);
+    button:hover {
+      transform: scale(1.05);
     }
 
     .stats {
-      display: flex;
-      gap: 25px;
-      font-size: 1.1rem;
-      font-weight: 500;
+      margin-top: 1em;
+      font-size: 1.2em;
     }
 
-    .puzzle-container {
-      display: grid;
-      width: 90vw;
-      max-width: 500px;
-      aspect-ratio: 1 / 1;
-      gap: 3px;
-      border-radius: 20px;
-      overflow: hidden;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
-      background: #000;
-      transition: border 0.3s;
+    .preview {
+      max-width: 300px;
+      border-radius: 1em;
+      margin-top: 1em;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
     }
 
-    .puzzle-container.bordered {
-      border: 4px solid #ff4da6;
+    #discord-login {
+      position: absolute;
+      top: 20px;
+      right: 20px;
     }
 
-    .tile {
-      background-size: var(--bg-size);
-      cursor: pointer;
-      transition: transform 0.2s ease, box-shadow 0.2s;
+    #leaderboard {
+      margin-top: 1em;
+      font-size: 1em;
+      background: white;
+      color: #6e00ff;
+      padding: 1em;
+      border-radius: 1em;
+      box-shadow: 0 0 10px rgba(255,255,255,0.2);
     }
 
-    .tile:hover {
-      transform: scale(1.03);
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-    }
-
-    .empty {
-      background: #1a1a1a;
-      cursor: default;
-    }
-
-    .win-animation .tile {
-      animation: winGlow 0.6s infinite alternate;
-    }
-
-    @keyframes winGlow {
-      to {
-        transform: scale(1.06);
-        box-shadow: 0 0 20px rgba(255, 77, 166, 0.8);
-      }
-    }
-
-    @media (max-width: 600px) {
-      h1 { font-size: 1.6rem; }
-      .preview { width: 160px; }
-      .controls { flex-direction: column; gap: 10px; }
-      .stats { font-size: 0.95rem; gap: 15px; }
-      .puzzle-container { max-width: 350px; }
+    #leaderboard h2 {
+      margin-top: 0;
     }
   </style>
 </head>
 <body>
+  <div id="discord-login">
+    <button onclick="loginWithDiscord()">Login with Discord</button>
+    <button onclick="logout()">Logout</button>
+  </div>
   <h1>IRyS Puzzle Mania</h1>
-  <img id="preview" alt="Puzzle Preview" class="preview"/>
-
-  <div class="controls">
-    <select id="difficulty" onchange="restartPuzzle()">
-      <option value="3">Easy (3x3)</option>
-      <option value="4" selected>Medium (4x4)</option>
-      <option value="5">Hard (5x5)</option>
-    </select>
-    <div class="stats">
-      <span id="timer">Time: 0s</span>
-      <span id="moves">Moves: 0</span>
-      <span id="best">Best: -</span>
-    </div>
-    <button id="loginButton" onclick="loginWithDiscord()">Login with Discord</button>
-    <button onclick="restartPuzzle()">Restart</button>
+  <img id="preview" class="preview"/>
+  <canvas id="puzzle" width="300" height="300"></canvas>
+  <div id="controls">
     <button onclick="solvePuzzle()">Solve</button>
-    <button onclick="toggleBorder()">Toggle Border</button>
+    <button onclick="restartPuzzle()">New Puzzle</button>
     <button onclick="showLeaderboard()">Leaderboard</button>
   </div>
-
-  <div class="puzzle-container" id="puzzle"></div>
-  <audio id="moveSound" src="move.mp3"></audio>
-
+  <div class="stats" id="stats">Moves: 0 | Time: 0s</div>
+  <div id="leaderboard" style="display:none;"></div>
+  <audio id="win-sound" src="https://freesound.org/data/previews/522/522254_11570106-lq.mp3"></audio>
   <script>
-    const container = document.getElementById('puzzle');
-    const timerDisplay = document.getElementById('timer');
-    const movesDisplay = document.getElementById('moves');
-    const bestDisplay = document.getElementById('best');
-    const difficultySelect = document.getElementById('difficulty');
-    const previewImage = document.getElementById('preview');
-    const moveSound = document.getElementById('moveSound');
-    const loginButton = document.getElementById('loginButton');
-    let size = parseInt(difficultySelect.value);
+    const canvas = document.getElementById("puzzle");
+    const ctx = canvas.getContext("2d");
+    const rows = 3;
+    const cols = 3;
+    const tileSize = canvas.width / cols;
     let tiles = [];
-    let timer = null;
-    let seconds = 0;
-    let moves = 0;
+    let emptyTile = { x: cols - 1, y: rows - 1 };
+    let img = new Image();
+    let currentImage = "";
     let isSolving = false;
-    let gameActive = true; // Enables win checking
-    let isInitialSolve = false; // New flag to track initial solve state
-    let currentUser = null;
-    let currentImage = '';
-
-    const fontLink = document.createElement('link');
-    fontLink.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap';
-    fontLink.rel = 'stylesheet';
-    document.head.appendChild(fontLink);
-
-    previewImage.onerror = () => {
-      alert(`Error: '${currentImage}' not found. Ensure images image1.png to image20.png are hosted.`);
-    };
-
-    moveSound.onerror = () => {
-      console.warn("Warning: 'move.mp3' not found.");
-    };
+    let moveCount = 0;
+    let startTime;
+    let timer;
+    let gameActive = true;
+    let discordId = null;
+    let username = null;
+    let token = null;
+    let isInitialSolve = false;
 
     function loginWithDiscord() {
-      const clientId = '1382641531810353172';
-      const redirectUri = encodeURIComponent('https://irys-puzzle-backend.vercel.app/auth/discord/callback');
-      const scope = encodeURIComponent('identify');
-      const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
-      window.location.href = discordAuthUrl;
+      window.location.href = "https://irys-puzzle-backend.vercel.app/auth/discord";
     }
 
-    window.onload = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const discordId = urlParams.get('discordId');
-      const username = urlParams.get('username');
-      const token = urlParams.get('token');
-      if (discordId && username && token) {
-        currentUser = { discordId, username, token };
-        alert(`Welcome to IRyS Puzzle Mania, ${decodeURIComponent(username)}!`);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        loginButton.textContent = `Logout: ${decodeURIComponent(username)}`;
-        loginButton.onclick = () => {
-          currentUser = null;
-          loginButton.textContent = 'Login with Discord';
-          loginButton.onclick = loginWithDiscord;
-          document.getElementById('user')?.remove();
-          window.location.href = '/';
-        };
-        document.querySelector('.controls').insertAdjacentHTML('beforeend', `<span id="user">Logged in as: ${decodeURIComponent(username)}</span>`);
+    function logout() {
+      localStorage.clear();
+      window.location.href = "/";
+    }
+
+    function drawTile(tile, x, y) {
+      if (tile !== null) {
+        const sx = (tile % cols) * tileSize;
+        const sy = Math.floor(tile / cols) * tileSize;
+        ctx.drawImage(img, sx, sy, tileSize, tileSize, x * tileSize, y * tileSize, tileSize, tileSize);
       } else {
-        loginButton.onclick = loginWithDiscord;
+        ctx.fillStyle = "white";
+        ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
       }
-      restartPuzzle();
-    };
-
-    function loadBest() {
-      const best = JSON.parse(localStorage.getItem(`IRySPuzzleBest${size}`)) || { time: Infinity, moves: Infinity };
-      bestDisplay.textContent = best.time === Infinity ? 'Best: -' : `Best: ${best.time}s, ${best.moves}m`;
-    }
-
-    function saveBest() {
-      const currentBest = JSON.parse(localStorage.getItem(`IRySPuzzleBest${size}`)) || { time: Infinity, moves: Infinity };
-      if (seconds < currentBest.time || (seconds === currentBest.time && moves < currentBest.moves)) {
-        localStorage.setItem(`IRySPuzzleBest${size}`, JSON.stringify({ time: seconds, moves }));
-        loadBest();
-      }
-    }
-
-    function startTimer() {
-      clearInterval(timer);
-      seconds = 0;
-      moves = 0;
-      timerDisplay.textContent = 'Time: 0s';
-      movesDisplay.textContent = 'Moves: 0';
-      timer = setInterval(() => {
-        seconds++;
-        timerDisplay.textContent = `Time: ${seconds}s`;
-      }, 1000);
-    }
-
-    function setRandomImage() {
-      const imageNumber = Math.floor(Math.random() * 20) + 1;
-      currentImage = `/image${imageNumber}.png`;
-      console.log('Loading image:', currentImage);
-      previewImage.src = currentImage;
-      document.querySelectorAll('.tile:not(.empty)').forEach(tile => {
-        tile.style.backgroundImage = `url('${currentImage}')`;
-      });
     }
 
     function createTiles() {
-      size = parseInt(difficultySelect.value);
-      const totalTiles = size * size;
-      container.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
-      container.style.gridTemplateRows = `repeat(${size}, 1fr)`;
-      container.style.setProperty('--bg-size', `${size * 100}% ${size * 100}%`);
       tiles = [];
-      for (let i = 0; i < totalTiles; i++) {
-        const tile = document.createElement('div');
-        tile.classList.add('tile');
-        tile.dataset.id = i;
-        const row = Math.floor(i / size);
-        const col = i % size;
-        tile.style.backgroundPosition = `${(col * 100) / (size - 1)}% ${(row * 100) / (size - 1)}%`;
-        tiles.push(tile);
+      for (let i = 0; i < rows * cols - 1; i++) {
+        tiles.push(i);
       }
-      tiles[totalTiles - 1].classList.add('empty');
-      setRandomImage();
+      tiles.push(null);
     }
 
     function shuffleTiles() {
-      const movable = tiles.filter(tile => !tile.classList.contains('empty'));
-      for (let i = movable.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [movable[i], movable[j]] = [movable[j], movable[i]];
-      }
-      const emptyTile = tiles.find(tile => tile.classList.contains('empty'));
-      tiles = [...movable, emptyTile];
-      if (!isSolvable()) {
-        if (movable.length >= 2) {
-          [movable[0], movable[1]] = [movable[1], movable[0]];
-          tiles = [...movable, emptyTile];
+      do {
+        for (let i = tiles.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
         }
-      }
+      } while (!isSolvable() || isSolved());
     }
 
     function isSolvable() {
-      let inversionCount = 0;
-      const flatTiles = tiles.map(tile => parseInt(tile.dataset.id));
-      for (let i = 0; i < flatTiles.length - 1; i++) {
-        for (let j = i + 1; j < flatTiles.length; j++) {
-          if (flatTiles[i] && flatTiles[j] && flatTiles[i] > flatTiles[j]) {
-            inversionCount++;
+      let invCount = 0;
+      for (let i = 0; i < tiles.length - 1; i++) {
+        for (let j = i + 1; j < tiles.length; j++) {
+          if (tiles[i] !== null && tiles[j] !== null && tiles[i] > tiles[j]) {
+            invCount++;
           }
         }
       }
-      const emptyRow = Math.floor(getEmptyIndex() / size) + 1;
-      if (size % 2 === 1) {
-        return inversionCount % 2 === 0;
-      } else {
-        return (inversionCount + emptyRow) % 2 === 0;
+      return invCount % 2 === 0;
+    }
+
+    function isSolved() {
+      for (let i = 0; i < tiles.length - 1; i++) {
+        if (tiles[i] !== i) return false;
       }
+      return true;
     }
 
     function render() {
-      container.innerHTML = '';
-      tiles.forEach(tile => container.appendChild(tile));
+      for (let i = 0; i < tiles.length; i++) {
+        const x = i % cols;
+        const y = Math.floor(i / cols);
+        drawTile(tiles[i], x, y);
+        if (tiles[i] === null) {
+          emptyTile = { x, y };
+        }
+      }
     }
 
-    function getEmptyIndex() {
-      return tiles.findIndex(tile => tile.classList.contains('empty'));
-    }
-
-    function canMove(tileId) {
-      const emptyIndex = getEmptyIndex();
-      const x1 = tileId % size, y1 = Math.floor(tileId / size);
-      const x2 = emptyIndex % size, y2 = Math.floor(emptyIndex / size);
-      return Math.abs(x1 - x2) + Math.abs(y1 - y2) === 1;
-    }
-
-    function moveTile(tileId) {
-      if (isSolving) return;
-      const emptyIndex = getEmptyIndex();
-      [tiles[tileId], tiles[emptyIndex]] = [tiles[emptyIndex], tiles[tileId]];
-      moves++;
-      movesDisplay.textContent = `Moves: ${moves}`;
-      moveSound.currentTime = 0;
-      moveSound.play().catch(err => console.warn("Audio play failed:", err));
-      render();
-    }
-
-    async function checkWin() {
-      if (isSolving || !gameActive || isInitialSolve) return; // Skip if solving, game inactive, or initial solve
-      const isCorrect = tiles.every((tile, i) => (
-        tile.dataset.id == i && !tile.classList.contains('empty') ||
-        tile.classList.contains('empty') && i === size * size - 1
-      ));
-      if (isCorrect) {
-        clearInterval(timer);
-        container.classList.add('win-animation');
-        const pointsMap = { 3: 10, 4: 20, 5: 30 };
-        const pointsEarned = pointsMap[size];
-        setTimeout(async () => {
-          alert(`🎉 You solved IRyS's puzzle! Time: ${seconds}s, Moves: ${moves}, Points: +${pointsEarned}`);
-          saveBest();
-          container.classList.remove('win-animation');
-          gameActive = false; // Disable further wins
-          if (currentUser) {
-            try {
-              const response = await fetch('https://irys-puzzle-backend.vercel.app/update-points', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${currentUser.token}`
-                },
-                body: JSON.stringify({ discordId: currentUser.discordId, points: pointsEarned })
-              });
-              const data = await response.json();
-              if (data.success) {
-                alert(`Total points: ${data.points}`);
-              } else {
-                alert('Error awarding points: ' + data.message);
-              }
-            } catch (error) {
-              console.error('Error awarding points:', error);
-              alert('Failed to update points.');
-            }
+    function moveTile(x, y) {
+      const dx = Math.abs(x - emptyTile.x);
+      const dy = Math.abs(y - emptyTile.y);
+      if ((dx === 1 && dy === 0) || (dx === 0 && dy === 1)) {
+        const index = y * cols + x;
+        const emptyIndex = emptyTile.y * cols + emptyTile.x;
+        [tiles[index], tiles[emptyIndex]] = [tiles[emptyIndex], tiles[index]];
+        moveCount++;
+        updateStats();
+        render();
+        if (gameActive && isSolved()) {
+          gameActive = false;
+          clearInterval(timer);
+          if (!isInitialSolve) {
+            updatePoints();
+            checkBestScore();
           }
-        }, 600);
+          document.getElementById("win-sound").play();
+          alert("You win!");
+        }
       }
     }
 
-    async function showLeaderboard() {
-      try {
-        const response = await fetch('https://irys-puzzle-backend.vercel.app/leaderboard');
-        const leaderboard = await response.json();
-        let leaderboardText = '🏆 IRyS Puzzle Mania Leaderboard 🏆\n';
-        leaderboard.forEach((user, index) => {
-          leaderboardText += `${index + 1}. ${user.username}: ${user.points} points\n`;
-        });
-        alert(leaderboardText);
-      } catch (error) {
-        console.error('Error fetching leaderboard:', error);
-        alert('Failed to load leaderboard.');
-      }
-    }
-
-    function solvePuzzle() {
-      isSolving = true;
-      isInitialSolve = true; // Mark as initial solve state
-      gameActive = false; // Disable win checking
-      createTiles();
-      tiles.forEach((tile, i) => tile.dataset.id = i);
-      tiles[tiles.length - 1].classList.add('empty');
-      render();
-      clearInterval(timer);
-      moves = 0;
-      seconds = 0;
-      timerDisplay.textContent = 'Time: 0s';
-      movesDisplay.textContent = 'Moves: 0';
-      setTimeout(() => {
-        isSolving = false;
-        isInitialSolve = false; // Reset after animation
-        gameActive = true; // Re-enable for player moves
-      }, 100);
-    }
-
-    function toggleBorder() {
-      container.classList.toggle('bordered');
-    }
-
-    container.addEventListener('click', e => {
-      const tile = e.target;
-      const tileId = tiles.indexOf(tile);
-      if (tileId !== -1 && canMove(tileId)) {
-        moveTile(tileId);
-        checkWin();
-      }
+    canvas.addEventListener("click", (e) => {
+      if (!img.complete || !gameActive) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / tileSize);
+      const y = Math.floor((e.clientY - rect.top) / tileSize);
+      moveTile(x, y);
     });
+
+    function updateStats() {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      document.getElementById("stats").textContent = `Moves: ${moveCount} | Time: ${elapsed}s`;
+    }
+
+    function startTimer() {
+      startTime = Date.now();
+      clearInterval(timer);
+      timer = setInterval(updateStats, 1000);
+    }
+
+    function loadBest() {
+      const best = localStorage.getItem("bestScore");
+      if (best) {
+        document.getElementById("stats").textContent += ` | Best: ${best}`;
+      }
+    }
+
+    function checkBestScore() {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const best = localStorage.getItem("bestScore");
+      if (!best || elapsed < best) {
+        localStorage.setItem("bestScore", elapsed);
+      }
+    }
+
+    function updatePoints() {
+      if (discordId && token) {
+        fetch("https://irys-puzzle-backend.vercel.app/api/update-points", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ discordId, username, token }),
+        });
+      }
+    }
+
+    function showLeaderboard() {
+      fetch("https://irys-puzzle-backend.vercel.app/api/leaderboard")
+        .then((res) => res.json())
+        .then((data) => {
+          const board = document.getElementById("leaderboard");
+          board.innerHTML = "<h2>Leaderboard</h2>";
+          data.forEach((entry, i) => {
+            board.innerHTML += `<p>${i + 1}. ${entry.username} - ${entry.points} pts</p>`;
+          });
+          board.style.display = "block";
+        });
+    }
+
+    function getRandomImageNumber() {
+      return Math.floor(Math.random() * 5) + 1;
+    }
 
     function restartPuzzle() {
       isSolving = false;
-      isInitialSolve = false; // Reset initial solve flag
-      gameActive = true; // Enable win checking
+      isInitialSolve = false;
+      gameActive = true;
       createTiles();
       shuffleTiles();
       render();
       startTimer();
-      container.classList.remove('win-animation');
       loadBest();
     }
 
-    restartPuzzle();
+    function solvePuzzle() {
+      isSolving = true;
+      isInitialSolve = true;
+      gameActive = false;
+      createTiles();
+      tiles.forEach((tile, i) => (tile.dataset = { id: i }));
+      tiles[tiles.length - 1] = null;
+      render();
+      clearInterval(timer);
+    }
+
+    window.onload = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      discordId = urlParams.get("discordId");
+      username = urlParams.get("username");
+      token = urlParams.get("token");
+
+      const imageNumber = getRandomImageNumber();
+      currentImage = `/image${imageNumber}.png`;
+      img.src = currentImage;
+      document.getElementById("preview").src = currentImage;
+
+      img.onload = () => {
+        restartPuzzle();
+      };
+    };
   </script>
 </body>
 </html>
