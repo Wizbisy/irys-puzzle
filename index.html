@@ -158,7 +158,7 @@
       <span id="moves">Moves: 0</span>
       <span id="best">Best: -</span>
     </div>
-    <button onclick="loginWithDiscord()">Login with Discord</button>
+    <button id="loginButton" onclick="loginWithDiscord()">Login with Discord</button>
     <button onclick="restartPuzzle()">Restart</button>
     <button onclick="solvePuzzle()">Solve</button>
     <button onclick="toggleBorder()">Toggle Border</button>
@@ -176,12 +176,14 @@
     const difficultySelect = document.getElementById('difficulty');
     const previewImage = document.getElementById('preview');
     const moveSound = document.getElementById('moveSound');
+    const loginButton = document.getElementById('loginButton');
     let size = parseInt(difficultySelect.value);
     let tiles = [];
     let timer = null;
     let seconds = 0;
     let moves = 0;
     let isSolving = false;
+    let gameActive = true; // New flag to prevent win after solve
     let currentUser = null;
     let currentImage = '';
 
@@ -215,7 +217,17 @@
         currentUser = { discordId, username, token };
         alert(`Welcome to IRyS Puzzle Mania, ${decodeURIComponent(username)}!`);
         window.history.replaceState({}, document.title, window.location.pathname);
+        loginButton.textContent = `Logout: ${decodeURIComponent(username)}`;
+        loginButton.onclick = () => {
+          currentUser = null; // Clear user
+          loginButton.textContent = 'Login with Discord';
+          loginButton.onclick = loginWithDiscord; // Revert to login
+          document.getElementById('user')?.remove(); // Remove status
+          window.location.href = '/'; // Refresh
+        };
         document.querySelector('.controls').insertAdjacentHTML('beforeend', `<span id="user">Logged in as: ${decodeURIComponent(username)}</span>`);
+      } else {
+        loginButton.onclick = loginWithDiscord;
       }
       restartPuzzle();
     };
@@ -247,10 +259,11 @@
 
     function setRandomImage() {
       const imageNumber = Math.floor(Math.random() * 20) + 1;
-      currentImage = `image${imageNumber}.png`;
+      currentImage = `/image${imageNumber}.png`; // Root-relative path
+      console.log('Loading image:', currentImage); // Debug
       previewImage.src = currentImage;
       document.querySelectorAll('.tile:not(.empty)').forEach(tile => {
-        tile.style.backgroundImage = `url('${currentImage}')`;
+        tile.style.backgroundImage = `url('${currentImage}')`; // Same path
       });
     }
 
@@ -336,7 +349,7 @@
     }
 
     async function checkWin() {
-      if (isSolving) return;
+      if (isSolving || !gameActive) return; // Skip if solving or game inactive
       const isCorrect = tiles.every((tile, i) => (
         tile.dataset.id == i && !tile.classList.contains('empty') ||
         tile.classList.contains('empty') && i === size * size - 1
@@ -350,6 +363,7 @@
           alert(`🎉 You solved IRyS's puzzle! Time: ${seconds}s, Moves: ${moves}, Points: +${pointsEarned}`);
           saveBest();
           container.classList.remove('win-animation');
+          gameActive = false; // Disable further wins until restart
           if (currentUser) {
             try {
               const response = await fetch('https://irys-puzzle-backend.vercel.app/update-points', {
@@ -392,6 +406,7 @@
 
     function solvePuzzle() {
       isSolving = true;
+      gameActive = false; // Disable win checking
       createTiles();
       tiles.forEach((tile, i) => tile.dataset.id = i);
       tiles[tiles.length - 1].classList.add('empty');
@@ -401,7 +416,10 @@
       seconds = 0;
       timerDisplay.textContent = 'Time: 0s';
       movesDisplay.textContent = 'Moves: 0';
-      setTimeout(() => isSolving = false, 100);
+      setTimeout(() => {
+        isSolving = false;
+        gameActive = true; // Re-enable after animation
+      }, 100);
     }
 
     function toggleBorder() {
@@ -419,6 +437,7 @@
 
     function restartPuzzle() {
       isSolving = false;
+      gameActive = true; // Enable win checking on restart
       createTiles();
       shuffleTiles();
       render();
