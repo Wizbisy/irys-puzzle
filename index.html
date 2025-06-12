@@ -184,7 +184,7 @@
     let moves = 0;
     let isSolving = false;
     let gameActive = true;
-    let playerMovesSinceRestart = 0; // Track player moves
+    let allowWin = false; // Enable win only after restart
     let currentUser = null;
     let currentImage = '';
 
@@ -350,7 +350,6 @@
       const emptyIndex = getEmptyIndex();
       [tiles[tileId], tiles[emptyIndex]] = [tiles[emptyIndex], tiles[tileId]];
       moves++;
-      playerMovesSinceRestart++;
       movesDisplay.textContent = `Moves: ${moves}`;
       moveSound.currentTime = 0;
       moveSound.play().catch(err => console.warn("Audio play failed:", err));
@@ -358,7 +357,7 @@
     }
 
     async function checkWin() {
-      if (isSolving || !gameActive || playerMovesSinceRestart === 0) return;
+      if (isSolving || !gameActive || !allowWin) return;
       const isCorrect = tiles.every((tile, i) => (
         tile.dataset.id == i && !tile.classList.contains('empty') ||
         tile.classList.contains('empty') && i === size * size - 1
@@ -373,7 +372,7 @@
           saveBest();
           container.classList.remove('win-animation');
           gameActive = false;
-          playerMovesSinceRestart = 0;
+          allowWin = false;
           if (currentUser) {
             try {
               const response = await fetch('https://irys-puzzle-backend.vercel.app/update-points', {
@@ -417,7 +416,7 @@
     function solvePuzzle() {
       isSolving = true;
       gameActive = false;
-      playerMovesSinceRestart = 0;
+      allowWin = false; // Disable win detection
       createTiles();
       tiles.forEach((tile, i) => tile.dataset.id = i);
       tiles[tiles.length - 1].classList.add('empty');
@@ -449,7 +448,7 @@
     function restartPuzzle() {
       isSolving = false;
       gameActive = true;
-      playerMovesSinceRestart = 0;
+      allowWin = true; // Enable win detection only after restart
       createTiles();
       shuffleTiles();
       render();
