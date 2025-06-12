@@ -264,18 +264,22 @@
       console.log('Attempting to load image:', currentImage);
       previewImage.src = currentImage;
       previewImage.onload = () => {
-        document.querySelectorAll('.tile:not(.empty)').forEach((tile, index) => {
-          const row = Math.floor(index / size);
-          const col = index % size;
-          tile.style.backgroundImage = `url('${currentImage}')`;
-          tile.style.backgroundSize = `${size * 100}% ${size * 100}%`; // Match grid size
-          tile.style.backgroundPosition = `${(col * 100) / (size - 1)}% ${(row * 100) / (size - 1)}%`;
-        });
+        setTileBackgrounds();
       };
       previewImage.onerror = () => {
         console.error(`Failed to load ${currentImage}. Ensure images are in the root folder.`);
         alert(`Error: '${currentImage}' not found. Ensure images image1.png to image20.png are hosted.`);
       };
+    }
+
+    function setTileBackgrounds() {
+      document.querySelectorAll('.tile:not(.empty)').forEach((tile, index) => {
+        const row = Math.floor(index / size);
+        const col = index % size;
+        tile.style.backgroundImage = `url('${currentImage}')`;
+        tile.style.backgroundSize = `${size * 100}% ${size * 100}%`;
+        tile.style.backgroundPosition = `${(col * 100) / (size - 1)}% ${(row * 100) / (size - 1)}%`;
+      });
     }
 
     function createTiles() {
@@ -292,7 +296,12 @@
         tiles.push(tile);
       }
       tiles[totalTiles - 1].classList.add('empty');
-      setRandomImage();
+      if (!currentImage) {
+        setRandomImage();
+      } else {
+        previewImage.src = currentImage;
+        setTileBackgrounds();
+      }
     }
 
     function shuffleTiles() {
@@ -309,6 +318,7 @@
           tiles = [...movable, emptyTile];
         }
       }
+      setTileBackgrounds();
     }
 
     function isSolvable() {
@@ -316,7 +326,7 @@
       const flatTiles = tiles.map(tile => parseInt(tile.dataset.id));
       for (let i = 0; i < flatTiles.length - 1; i++) {
         for (let j = i + 1; j < flatTiles.length; j++) {
-          if (flatTiles[i] && flatTiles[j] && flatTiles[i] > flatTiles[j]) {
+          if (flatTls[i] && flatTiles[j] && flatTiles[i] > flatTiles[j]) {
             inversionCount++;
           }
         }
@@ -417,9 +427,14 @@
       isSolving = true;
       gameActive = false;
       allowWin = false;
-      createTiles();
-      tiles.forEach((tile, i) => tile.dataset.id = i);
-      tiles[tiles.length - 1].classList.add('empty');
+      tiles.forEach((tile, i) => {
+        tile.dataset.id = i;
+        tile.classList.remove('empty');
+        if (i === size * size - 1) {
+          tile.classList.add('empty');
+        }
+      });
+      setTileBackgrounds();
       render();
       clearInterval(timer);
       moves = 0;
@@ -461,4 +476,3 @@
   </script>
 </body>
 </html>
-  
