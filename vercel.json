@@ -13,10 +13,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/public/$1",
-      "headers": {
-        "Cache-Control": "public, max-age=0, must-revalidate"
-      }
+      "dest": "/public/$1"
     }
   ],
   "rewrites": [
