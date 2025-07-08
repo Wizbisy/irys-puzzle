@@ -164,7 +164,7 @@
     <button onclick="restartPuzzle()">Restart</button>
     <button onclick="solvePuzzle()">Solve</button>
     <button onclick="toggleBorder()">Toggle Border</button>
-    <button onclick="window.location.href='leaderboard.html'">Leaderboard</button>
+    <button onclick="window.location.href='leaderboard.html'">View Leaderboard</button>
   </div>
 
   <div class="puzzle-container" id="puzzle"></div>
@@ -200,7 +200,7 @@
     };
 
     function loginWithDiscord() {
-      const clientId = '1382641531810353172'; // Match your backend's DISCORD_CLIENT_ID
+      const clientId = '1382641531810353172';
       const redirectUri = encodeURIComponent('https://irys-puzzle-backend.vercel.app/auth/discord/callback');
       const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
       window.location.href = authUrl;
