@@ -136,44 +136,6 @@
       }
     }
 
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-
-    .modal-content {
-      background: #fff;
-      color: #2e004f;
-      padding: 20px;
-      border-radius: 10px;
-      max-width: 500px;
-      width: 90%;
-      text-align: center;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-    }
-
-    .modal-content button {
-      margin-top: 10px;
-      padding: 10px 20px;
-      background: #ff4da6;
-      color: #fff;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-
-    .modal-content button:hover {
-      background: #e6008c;
-    }
-
     @media (max-width: 600px) {
       h1 { font-size: 1.6rem; }
       .preview { width: 160px; }
@@ -198,7 +160,7 @@
       <span id="moves">Moves: 0</span>
       <span id="best">Best: -</span>
     </div>
-    <button id="loginButton" onclick="loginWithDiscord()">Login with Discord</button>
+    <button id="loginButton">Login with Discord</button>
     <button onclick="restartPuzzle()">Restart</button>
     <button onclick="solvePuzzle()">Solve</button>
     <button onclick="toggleBorder()">Toggle Border</button>
@@ -228,11 +190,6 @@
     let currentUser = null;
     let currentImage = '';
 
-    const fontLink = document.createElement('link');
-    fontLink.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap';
-    fontLink.rel = 'stylesheet';
-    document.head.appendChild(fontLink);
-
     previewImage.onerror = () => {
       console.error(`Error loading preview image: ${currentImage}`);
       alert(`Error: '${currentImage}' not found. Ensure images image1.png to image9.png are in the /images directory.`);
@@ -243,7 +200,7 @@
     };
 
     function loginWithDiscord() {
-      const clientId = '1382641531810353172';
+      const clientId = '1382641531810353172'; // Match your backend's DISCORD_CLIENT_ID
       const redirectUri = encodeURIComponent('https://irys-puzzle-backend.vercel.app/auth/discord/callback');
       const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
       window.location.href = authUrl;
@@ -297,8 +254,8 @@
     }
 
     function setRandomImage() {
-      const imageNumber = Math.floor(Math.random() * 16) + 1; // 9 images for now
-      currentImage = `/images/image${imageNumber}.png`; // Updated to public/images/
+      const imageNumber = Math.floor(Math.random() * 9) + 1;
+      currentImage = `/images/image${imageNumber}.png`;
       console.log('Attempting to load image:', currentImage);
       previewImage.src = currentImage;
       previewImage.onload = () => {
