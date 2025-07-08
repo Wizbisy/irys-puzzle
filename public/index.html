@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>IRyS Puzzle Mania</title>
-  <link rel="icon" href="/favicon.png" type="image/png"/>
+  <link rel="icon" href="favicon.png" type="image/png"/>
 
   <meta property="og:title" content="IRyS Puzzle Mania" />
   <meta property="og:description" content="Solve dazzling IRyS-themed puzzles!" />
@@ -184,14 +184,14 @@
   </div>
 
   <div class="puzzle-container" id="puzzle"></div>
-  <audio id="moveSound" src="/move.mp3"></audio>
+  <audio id="moveSound" src="move.mp3"></audio>
 
   <script>
     // Configuration
     const CONFIG = {
       backendUrl: 'https://irys-puzzle-backend.vercel.app',
-      imagePath: '/images/image',
-      fallbackImage: '/images/fallback.png',
+      imagePath: 'images/image', // Updated to images/ (no leading /)
+      fallbackImage: 'images/fallback.png', // Updated to images/
       imageCount: 16,
       discordClientId: '1382641531810353172'
     };
@@ -220,8 +220,8 @@
       // Initialize game
       async init() {
         // Check audio availability
-        this.moveSound.oncanplaythrough = () => { this.audioAvailable = true; };
-        this.moveSound.onerror = () => { console.warn("Warning: 'move.mp3' not found."); };
+        this.moveSound.oncanplaythrough = () => { this.audioAvailable = true; console.log('Audio loaded: move.mp3'); };
+        this.moveSound.onerror = () => { console.warn("Warning: 'move.mp3' not found in root directory."); };
         this.moveSound.load();
 
         // Handle Discord login
@@ -291,13 +291,14 @@
           const img = new Image();
           img.src = this.currentImage;
           img.onerror = () => {
-            console.warn(`Image ${this.currentImage} not found, using fallback.`);
+            console.warn(`Image ${this.currentImage} not found, using fallback: ${CONFIG.fallbackImage}`);
             this.currentImage = CONFIG.fallbackImage;
             this.previewImage.src = this.currentImage;
             this.setTileBackgrounds();
             resolve();
           };
           img.onload = () => {
+            console.log('Image loaded successfully:', this.currentImage);
             this.previewImage.src = this.currentImage;
             this.setTileBackgrounds();
             resolve();
@@ -308,10 +309,11 @@
       // Set tile backgrounds
       setTileBackgrounds() {
         if (!this.currentImage) {
-          console.warn('No currentImage set, using fallback.');
+          console.warn('No currentImage set, using fallback: ' + CONFIG.fallbackImage);
           this.currentImage = CONFIG.fallbackImage;
           this.previewImage.src = this.currentImage;
         }
+        console.log('Setting tile backgrounds with image:', this.currentImage);
         this.tiles.forEach((tile, index) => {
           if (!tile.classList.contains('empty')) {
             const row = Math.floor(index / this.size);
@@ -319,6 +321,7 @@
             tile.style.backgroundImage = `url('${this.currentImage}')`;
             tile.style.backgroundSize = `${this.size * 100}% ${this.size * 100}%`;
             tile.style.backgroundPosition = `${(col * 100) / (this.size - 1)}% ${(row * 100) / (this.size - 1)}%`;
+            console.log(`Tile ${index}: background-position: ${(col * 100) / (this.size - 1)}% ${(row * 100) / (this.size - 1)}%`);
           } else {
             tile.style.backgroundImage = 'none';
           }
@@ -347,7 +350,7 @@
       shuffleTiles() {
         const movable = this.tiles.filter(tile => !tile.classList.contains('empty'));
         // Perform multiple random swaps for better randomization
-        for (let i = 0; i < movable.length * 10; i++) { // Increased swaps
+        for (let i = 0; i < movable.length * 10; i++) {
           const j1 = Math.floor(Math.random() * movable.length);
           const j2 = Math.floor(Math.random() * movable.length);
           [movable[j1], movable[j2]] = [movable[j2], movable[j1]];
@@ -366,7 +369,7 @@
         }
         if (attempts >= maxAttempts) {
           console.warn('Failed to find solvable configuration after max attempts, reshuffling.');
-          this.shuffleTiles(); // Recursive retry
+          this.shuffleTiles();
           return;
         }
         // Verify puzzle is not solved
@@ -376,7 +379,7 @@
         ));
         if (isSolved) {
           console.log('Puzzle is solved after shuffle, reshuffling.');
-          this.shuffleTiles(); // Reshuffle if accidentally solved
+          this.shuffleTiles();
           return;
         }
         console.log('Shuffled tiles:', this.tiles.map(tile => tile.dataset.id));
@@ -449,9 +452,7 @@
         if (isCorrect) {
           clearInterval(this.timer);
           this.container.classList.add('win-animation');
-          const pointsMap = { 3: 10 pride
-
-System: 4: 20, 5: 30 };
+          const pointsMap = { 3: 10, 4: 20, 5: 30 };
           const pointsEarned = pointsMap[this.size];
           setTimeout(async () => {
             alert(`🎉 You solved IRyS's puzzle! Time: ${this.seconds}s, Moves: ${this.moves}, Points: +${pointsEarned}`);
@@ -569,7 +570,7 @@ System: 4: 20, 5: 30 };
 
     // Handle preview image errors
     game.previewImage.onerror = () => {
-      console.warn(`Preview image ${game.currentImage} not found, using fallback.`);
+      console.warn(`Preview image ${game.currentImage} not found, using fallback: ${CONFIG.fallbackImage}`);
       game.currentImage = CONFIG.fallbackImage;
       game.previewImage.src = game.currentImage;
       game.setTileBackgrounds();
