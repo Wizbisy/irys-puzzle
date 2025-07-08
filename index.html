@@ -297,7 +297,7 @@
     }
 
     function setRandomImage() {
-      const imageNumber = Math.floor(Math.random() * 9) + 1; // 9 images for now
+      const imageNumber = Math.floor(Math.random() * 16) + 1; // 9 images for now
       currentImage = `/images/image${imageNumber}.png`; // Updated to public/images/
       console.log('Attempting to load image:', currentImage);
       previewImage.src = currentImage;
