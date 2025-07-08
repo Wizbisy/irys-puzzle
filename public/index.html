@@ -113,11 +113,16 @@
       background-size: var(--bg-size);
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s;
+      user-select: none;
     }
 
     .tile:hover:not(.empty) {
       transform: scale(1.03);
       box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .tile:focus {
+      outline: 2px solid #ff4da6;
     }
 
     .empty {
@@ -143,6 +148,17 @@
       .stats { font-size: 0.95rem; gap: 15px; }
       .puzzle-container { max-width: 350px; }
     }
+
+    @media (max-width: 400px) {
+      .puzzle-container { max-width: 280px; }
+      .controls select, .controls button { padding: 10px 18px; font-size: 0.9rem; }
+    }
+
+    @media (max-width: 320px) {
+      .puzzle-container { max-width: 240px; }
+      h1 { font-size: 1.4rem; }
+      .preview { width: 140px; }
+    }
   </style>
 </head>
 <body>
@@ -150,7 +166,7 @@
   <img id="preview" alt="Puzzle Preview" class="preview"/>
 
   <div class="controls">
-    <select id="difficulty" onchange="restartPuzzle()">
+    <select id="difficulty" onchange="game.restart()">
       <option value="3">Easy (3x3)</option>
       <option value="4" selected>Medium (4x4)</option>
       <option value="5">Hard (5x5)</option>
@@ -161,9 +177,9 @@
       <span id="best">Best: -</span>
     </div>
     <button id="loginButton">Login with Discord</button>
-    <button onclick="restartPuzzle()">Restart</button>
-    <button onclick="solvePuzzle()">Solve</button>
-    <button onclick="toggleBorder()">Toggle Border</button>
+    <button onclick="game.restart()">Restart</button>
+    <button onclick="game.solve()">Solve</button>
+    <button onclick="game.toggleBorder()">Toggle Border</button>
     <button onclick="window.location.href='leaderboard.html'">View Leaderboard</button>
   </div>
 
@@ -171,297 +187,370 @@
   <audio id="moveSound" src="/move.mp3"></audio>
 
   <script>
-    const container = document.getElementById('puzzle');
-    const timerDisplay = document.getElementById('timer');
-    const movesDisplay = document.getElementById('moves');
-    const bestDisplay = document.getElementById('best');
-    const difficultySelect = document.getElementById('difficulty');
-    const previewImage = document.getElementById('preview');
-    const moveSound = document.getElementById('moveSound');
-    const loginButton = document.getElementById('loginButton');
-    let size = parseInt(difficultySelect.value);
-    let tiles = [];
-    let timer = null;
-    let seconds = 0;
-    let moves = 0;
-    let isSolving = false;
-    let gameActive = true;
-    let allowWin = false;
-    let currentUser = null;
-    let currentImage = '';
-
-    previewImage.onerror = () => {
-      console.error(`Error loading preview image: ${currentImage}`);
-      alert(`Error: '${currentImage}' not found. Ensure images image1.png to image9.png are in the /images directory.`);
+    // Configuration
+    const CONFIG = {
+      backendUrl: 'https://irys-puzzle-backend.vercel.app',
+      imagePath: '/images/image',
+      fallbackImage: '/images/fallback.png',
+      imageCount: 16,
+      discordClientId: '1382641531810353172'
     };
 
-    moveSound.onerror = () => {
-      console.warn("Warning: 'move.mp3' not found.");
-    };
+    // Game object to encapsulate state and logic
+    const game = {
+      container: document.getElementById('puzzle'),
+      timerDisplay: document.getElementById('timer'),
+      movesDisplay: document.getElementById('moves'),
+      bestDisplay: document.getElementById('best'),
+      difficultySelect: document.getElementById('difficulty'),
+      previewImage: document.getElementById('preview'),
+      moveSound: document.getElementById('moveSound'),
+      loginButton: document.getElementById('loginButton'),
+      size: parseInt(document.getElementById('difficulty').value),
+      tiles: [],
+      timer: null,
+      seconds: 0,
+      moves: 0,
+      isSolving: false,
+      gameActive: false,
+      currentUser: null,
+      currentImage: '',
+      audioAvailable: false,
 
-    function loginWithDiscord() {
-      const clientId = '1382641531810353172';
-      const redirectUri = encodeURIComponent('https://irys-puzzle-backend.vercel.app/auth/discord/callback');
-      const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
-      window.location.href = authUrl;
-    }
+      // Initialize game
+      init() {
+        // Check audio availability
+        this.moveSound.oncanplaythrough = () => { this.audioAvailable = true; };
+        this.moveSound.onerror = () => { console.warn("Warning: 'move.mp3' not found."); };
+        this.moveSound.load();
 
-    window.onload = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const discordId = urlParams.get('discordId');
-      const username = urlParams.get('username');
-      const token = urlParams.get('token');
-      if (discordId && username && token) {
-        currentUser = { discordId, username, token };
-        alert(`Welcome to IRyS Puzzle Mania, ${decodeURIComponent(username)}!`);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        loginButton.textContent = `Logout: ${decodeURIComponent(username)}`;
-        loginButton.onclick = () => {
-          currentUser = null;
-          loginButton.textContent = 'Login with Discord';
-          loginButton.onclick = loginWithDiscord;
-          window.location.href = '/';
+        // Handle Discord login
+        const urlParams = new URLSearchParams(window.location.search);
+        const discordId = urlParams.get('discordId');
+        const username = urlParams.get('username');
+        const token = urlParams.get('token');
+        if (discordId && username && token) {
+          this.currentUser = { discordId, username: decodeURIComponent(username), token };
+          alert(`Welcome to IRyS Puzzle Mania, ${this.currentUser.username}!`);
+          window.history.replaceState({}, document.title, window.location.pathname);
+          this.loginButton.textContent = `Logout: ${this.currentUser.username}`;
+          this.loginButton.onclick = () => {
+            this.currentUser = null;
+            this.loginButton.textContent = 'Login with Discord';
+            this.loginButton.onclick = () => this.loginWithDiscord();
+            window.location.href = '/';
+          };
+        } else {
+          this.loginButton.onclick = () => this.loginWithDiscord();
+        }
+        this.restart();
+      },
+
+      // Discord login
+      loginWithDiscord() {
+        const redirectUri = encodeURIComponent(`${CONFIG.backendUrl}/auth/discord/callback`);
+        const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${CONFIG.discordClientId}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
+        window.location.href = authUrl;
+      },
+
+      // Load best score
+      loadBest() {
+        const best = JSON.parse(localStorage.getItem(`IRySPuzzleBest${this.size}`)) || { time: Infinity, moves: Infinity };
+        this.bestDisplay.textContent = best.time === Infinity ? 'Best: -' : `Best: ${best.time}s, ${best.moves}m`;
+      },
+
+      // Save best score
+      saveBest() {
+        const currentBest = JSON.parse(localStorage.getItem(`IRySPuzzleBest${this.size}`)) || { time: Infinity, moves: Infinity };
+        if (this.seconds < currentBest.time || (this.seconds === currentBest.time && this.moves < currentBest.moves)) {
+          localStorage.setItem(`IRySPuzzleBest${this.size}`, JSON.stringify({ time: this.seconds, moves: this.moves }));
+          this.loadBest();
+        }
+      },
+
+      // Start timer
+      startTimer() {
+        clearInterval(this.timer);
+        this.seconds = 0;
+        this.moves = 0;
+        this.timerDisplay.textContent = 'Time: 0s';
+        this.movesDisplay.textContent = 'Moves: 0';
+        this.timer = setInterval(() => {
+          this.seconds++;
+          this.timerDisplay.textContent = `Time: ${this.seconds}s`;
+        }, 1000);
+      },
+
+      // Set random image with validation
+      async setRandomImage() {
+        const imageNumber = Math.floor(Math.random() * CONFIG.imageCount) + 1;
+        this.currentImage = `${CONFIG.imagePath}${imageNumber}.png`;
+        console.log('Attempting to load image:', this.currentImage);
+
+        const img = new Image();
+        img.src = this.currentImage;
+        img.onerror = () => {
+          console.warn(`Image ${this.currentImage} not found, using fallback.`);
+          this.currentImage = CONFIG.fallbackImage;
+          this.previewImage.src = this.currentImage;
+          this.setTileBackgrounds();
         };
-      } else {
-        loginButton.onclick = loginWithDiscord;
-      }
-      restartPuzzle();
-    };
+        img.onload = () => {
+          this.previewImage.src = this.currentImage;
+          this.setTileBackgrounds();
+        };
+      },
 
-    function loadBest() {
-      const best = JSON.parse(localStorage.getItem(`IRySPuzzleBest${size}`)) || { time: Infinity, moves: Infinity };
-      bestDisplay.textContent = best.time === Infinity ? 'Best: -' : `Best: ${best.time}s, ${best.moves}m`;
-    }
-
-    function saveBest() {
-      const currentBest = JSON.parse(localStorage.getItem(`IRySPuzzleBest${size}`)) || { time: Infinity, moves: Infinity };
-      if (seconds < currentBest.time || (seconds === currentBest.time && moves < currentBest.moves)) {
-        localStorage.setItem(`IRySPuzzleBest${size}`, JSON.stringify({ time: seconds, moves }));
-        loadBest();
-      }
-    }
-
-    function startTimer() {
-      clearInterval(timer);
-      seconds = 0;
-      moves = 0;
-      timerDisplay.textContent = 'Time: 0s';
-      movesDisplay.textContent = 'Moves: 0';
-      timer = setInterval(() => {
-        seconds++;
-        timerDisplay.textContent = `Time: ${seconds}s`;
-      }, 1000);
-    }
-
-    function setRandomImage() {
-      const imageNumber = Math.floor(Math.random() * 9) + 1;
-      currentImage = `/images/image${imageNumber}.png`;
-      console.log('Attempting to load image:', currentImage);
-      previewImage.src = currentImage;
-      previewImage.onload = () => {
-        console.log('Image loaded successfully:', currentImage);
-        setTileBackgrounds();
-      };
-    }
-
-    function setTileBackgrounds() {
-      if (!currentImage) {
-        console.warn('No currentImage set, skipping tile backgrounds.');
-        return;
-      }
-      tiles.forEach((tile, index) => {
-        if (!tile.classList.contains('empty')) {
-          const row = Math.floor(index / size);
-          const col = index % size;
-          tile.style.backgroundImage = `url('${currentImage}')`;
-          tile.style.backgroundSize = `${size * 100}% ${size * 100}%`;
-          tile.style.backgroundPosition = `${(col * 100) / (size - 1)}% ${(row * 100) / (size - 1)}%`;
-          console.log(`Setting tile ${index} (dataset.id: ${tile.dataset.id}) with image ${currentImage} at position ${col}, ${row}`);
+      // Set tile backgrounds
+      setTileBackgrounds() {
+        if (!this.currentImage) {
+          console.warn('No currentImage set, using fallback.');
+          this.currentImage = CONFIG.fallbackImage;
+          this.previewImage.src = this.currentImage;
         }
-      });
-    }
-
-    function createTiles() {
-      size = parseInt(difficultySelect.value);
-      const totalTiles = size * size;
-      container.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
-      container.style.gridTemplateRows = `repeat(${size}, 1fr)`;
-      container.style.setProperty('--bg-size', `${size * 100}% ${size * 100}%`);
-      tiles = [];
-      for (let i = 0; i < totalTiles; i++) {
-        const tile = document.createElement('div');
-        tile.classList.add('tile');
-        tile.dataset.id = i;
-        tiles.push(tile);
-      }
-      tiles[totalTiles - 1].classList.add('empty');
-      if (!currentImage) {
-        setRandomImage();
-      } else {
-        previewImage.src = currentImage;
-        setTileBackgrounds();
-      }
-    }
-
-    function shuffleTiles() {
-      const movable = tiles.filter(tile => !tile.classList.contains('empty'));
-      for (let i = movable.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [movable[i], movable[j]] = [movable[j], movable[i]];
-      }
-      const emptyTile = tiles.find(tile => tile.classList.contains('empty'));
-      tiles = [...movable, emptyTile];
-      if (!isSolvable()) {
-        if (movable.length >= 2) {
-          [movable[0], movable[1]] = [movable[1], movable[0]];
-          tiles = [...movable, emptyTile];
-        }
-      }
-      setTileBackgrounds();
-    }
-
-    function isSolvable() {
-      let inversionCount = 0;
-      const flatTiles = tiles.map(tile => parseInt(tile.dataset.id));
-      for (let i = 0; i < flatTiles.length - 1; i++) {
-        for (let j = i + 1; j < flatTiles.length; j++) {
-          if (flatTiles[i] && flatTiles[j] && flatTiles[i] > flatTiles[j]) {
-            inversionCount++;
+        this.tiles.forEach((tile, index) => {
+          if (!tile.classList.contains('empty')) {
+            const row = Math.floor(index / this.size);
+            const col = index % this.size;
+            tile.style.backgroundImage = `url('${this.currentImage}')`;
+            tile.style.backgroundSize = `${this.size * 100}% ${this.size * 100}%`;
+            tile.style.backgroundPosition = `${(col * 100) / (this.size - 1)}% ${(row * 100) / (this.size - 1)}%`;
+          } else {
+            tile.style.backgroundImage = 'none';
           }
+        });
+      },
+
+      // Create tiles
+      createTiles() {
+        this.size = parseInt(this.difficultySelect.value);
+        const totalTiles = this.size * this.size;
+        this.container.style.gridTemplateColumns = `repeat(${this.size}, 1fr)`;
+        this.container.style.gridTemplateRows = `repeat(${this.size}, 1fr)`;
+        this.container.style.setProperty('--bg-size', `${this.size * 100}% ${this.size * 100}%`);
+        this.tiles = [];
+        for (let i = 0; i < totalTiles; i++) {
+          const tile = document.createElement('div');
+          tile.classList.add('tile');
+          tile.dataset.id = i;
+          tile.tabIndex = 0; // Accessibility: Make tiles focusable
+          this.tiles.push(tile);
         }
-      }
-      const emptyRow = Math.floor(getEmptyIndex() / size) + 1;
-      if (size % 2 === 1) {
-        return inversionCount % 2 === 0;
-      } else {
-        return (inversionCount + emptyRow) % 2 === 0;
-      }
-    }
+        this.tiles[totalTiles - 1].classList.add('empty');
+        if (!this.currentImage) {
+          this.setRandomImage();
+        } else {
+          this.previewImage.src = this.currentImage;
+          this.setTileBackgrounds();
+        }
+      },
 
-    function render() {
-      container.innerHTML = '';
-      tiles.forEach(tile => container.appendChild(tile));
-    }
+      // Shuffle tiles
+      shuffleTiles() {
+        const movable = this.tiles.filter(tile => !tile.classList.contains('empty'));
+        for (let i = movable.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [movable[i], movable[j]] = [movable[j], movable[i]];
+        }
+        const emptyTile = this.tiles.find(tile => tile.classList.contains('empty'));
+        this.tiles = [...movable, emptyTile];
+        while (!this.isSolvable()) {
+          const i = Math.floor(Math.random() * (movable.length - 1));
+          const j = Math.floor(Math.random() * (movable.length - 1));
+          [movable[i], movable[j]] = [movable[j], movable[i]];
+          this.tiles = [...movable, emptyTile];
+        }
+        this.setTileBackgrounds();
+      },
 
-    function getEmptyIndex() {
-      return tiles.findIndex(tile => tile.classList.contains('empty'));
-    }
-
-    function canMove(tileId) {
-      const emptyIndex = getEmptyIndex();
-      const x1 = tileId % size, y1 = Math.floor(tileId / size);
-      const x2 = emptyIndex % size, y2 = Math.floor(emptyIndex / size);
-      return Math.abs(x1 - x2) + Math.abs(y1 - y2) === 1;
-    }
-
-    function moveTile(tileId) {
-      if (isSolving) return;
-      const emptyIndex = getEmptyIndex();
-      [tiles[tileId], tiles[emptyIndex]] = [tiles[emptyIndex], tiles[tileId]];
-      moves++;
-      movesDisplay.textContent = `Moves: ${moves}`;
-      moveSound.currentTime = 0;
-      moveSound.play().catch(err => console.warn("Audio play failed:", err));
-      render();
-      checkWin();
-    }
-
-    function checkWin() {
-      if (isSolving || !gameActive || !allowWin) return;
-      const isCorrect = tiles.every((tile, i) => (
-        tile.dataset.id == i && !tile.classList.contains('empty') ||
-        tile.classList.contains('empty') && i === size * size - 1
-      ));
-      if (isCorrect) {
-        clearInterval(timer);
-        container.classList.add('win-animation');
-        const pointsMap = { 3: 10, 4: 20, 5: 30 };
-        const pointsEarned = pointsMap[size];
-        setTimeout(async () => {
-          alert(`🎉 You solved IRyS's puzzle! Time: ${seconds}s, Moves: ${moves}, Points: +${pointsEarned}`);
-          saveBest();
-          container.classList.remove('win-animation');
-          gameActive = false;
-          allowWin = false;
-          if (currentUser) {
-            try {
-              const response = await fetch('https://irys-puzzle-backend.vercel.app/update-points', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${currentUser.token}`
-                },
-                body: JSON.stringify({ discordId: currentUser.discordId, points: pointsEarned })
-              });
-              const data = await response.json();
-              if (data.success) {
-                alert(`Total points: ${data.points}`);
-              } else {
-                alert('Error awarding points: ' + data.message);
-              }
-            } catch (error) {
-              console.error('Error awarding points:', error);
-              alert('Failed to update points.');
+      // Check if puzzle is solvable
+      isSolvable() {
+        let inversionCount = 0;
+        const flatTiles = this.tiles.map(tile => parseInt(tile.dataset.id));
+        for (let i = 0; i < flatTiles.length - 1; i++) {
+          if (flatTiles[i] === flatTiles.length - 1) continue; // Skip empty tile
+          for (let j = i + 1; j < flatTiles.length; j++) {
+            if (flatTiles[j] === flatTiles.length - 1) continue; // Skip empty tile
+            if (flatTiles[i] > flatTiles[j]) {
+              inversionCount++;
             }
           }
-        }, 600);
-      }
-    }
-
-    function solvePuzzle() {
-      isSolving = true;
-      gameActive = false;
-      allowWin = false;
-      tiles.forEach((tile, i) => {
-        tile.dataset.id = i;
-        tile.classList.remove('empty');
-        if (i === size * size - 1) {
-          tile.classList.add('empty');
         }
-      });
-      if (currentImage) {
-        setTileBackgrounds();
-      } else {
-        console.warn('No currentImage available, using default.');
-        setRandomImage();
+        const emptyIndex = this.getEmptyIndex();
+        const emptyRow = Math.floor(emptyIndex / this.size) + 1;
+        return this.size % 2 === 1
+          ? inversionCount % 2 === 0
+          : (inversionCount + emptyRow) % 2 === 0;
+      },
+
+      // Render tiles
+      render() {
+        this.container.innerHTML = '';
+        this.tiles.forEach(tile => this.container.appendChild(tile));
+      },
+
+      // Get empty tile index
+      getEmptyIndex() {
+        return this.tiles.findIndex(tile => tile.classList.contains('empty'));
+      },
+
+      // Check if tile can move
+      canMove(tileId) {
+        const emptyIndex = this.getEmptyIndex();
+        const x1 = tileId % this.size, y1 = Math.floor(tileId / this.size);
+        const x2 = emptyIndex % this.size, y2 = Math.floor(emptyIndex / this.size);
+        return Math.abs(x1 - x2) + Math.abs(y1 - y2) === 1;
+      },
+
+      // Move tile
+      moveTile(tileId) {
+        if (this.isSolving || !this.gameActive) return;
+        const emptyIndex = this.getEmptyIndex();
+        [this.tiles[tileId], this.tiles[emptyIndex]] = [this.tiles[emptyIndex], this.tiles[tileId]];
+        this.moves++;
+        this.movesDisplay.textContent = `Moves: ${this.moves}`;
+        if (this.audioAvailable) {
+          this.moveSound.currentTime = 0;
+          this.moveSound.play().catch(err => console.warn("Audio play failed:", err));
+        }
+        this.render();
+        this.checkWin();
+      },
+
+      // Check for win
+      async checkWin() {
+        if (this.isSolving || !this.gameActive) return;
+        const isCorrect = this.tiles.every((tile, i) => (
+          tile.dataset.id == i && !tile.classList.contains('empty') ||
+          tile.classList.contains('empty') && i === this.size * this.size - 1
+        ));
+        if (isCorrect) {
+          clearInterval(this.timer);
+          this.container.classList.add('win-animation');
+          const pointsMap = { 3: 10, 4: 20, 5: 30 };
+          const pointsEarned = pointsMap[this.size];
+          setTimeout(async () => {
+            alert(`🎉 You solved IRyS's puzzle! Time: ${this.seconds}s, Moves: ${this.moves}, Points: +${pointsEarned}`);
+            this.saveBest();
+            this.container.classList.remove('win-animation');
+            this.gameActive = false;
+            if (this.currentUser) {
+              try {
+                const response = await fetch(`${CONFIG.backendUrl}/update-points`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.currentUser.token}`
+                  },
+                  body: JSON.stringify({ discordId: this.currentUser.discordId, points: pointsEarned })
+                });
+                const data = await response.json();
+                if (data.success) {
+                  alert(`Total points: ${data.points}`);
+                } else {
+                  alert(`Error awarding points: ${data.message || 'Unknown error'}`);
+                }
+              } catch (error) {
+                console.error('Error awarding points:', error);
+                alert('Failed to update points. Please try again later.');
+              }
+            }
+          }, 600);
+        }
+      },
+
+      // Solve puzzle
+      solve() {
+        this.isSolving = true;
+        this.gameActive = false;
+        this.tiles.forEach((tile, i) => {
+          tile.dataset.id = i;
+          tile.classList.remove('empty');
+          if (i === this.size * this.size - 1) {
+            tile.classList.add('empty');
+          }
+        });
+        this.setTileBackgrounds();
+        this.render();
+        clearInterval(this.timer);
+        this.moves = 0;
+        this.seconds = 0;
+        this.timerDisplay.textContent = 'Time: 0s';
+        this.movesDisplay.textContent = 'Moves: 0';
+        setTimeout(() => {
+          this.isSolving = false;
+          this.gameActive = true;
+        }, 100);
+      },
+
+      // Toggle border
+      toggleBorder() {
+        this.container.classList.toggle('bordered');
+      },
+
+      // Restart game
+      restart() {
+        this.isSolving = false;
+        this.gameActive = true;
+        this.createTiles();
+        this.shuffleTiles();
+        this.render();
+        this.startTimer();
+        this.container.classList.remove('win-animation');
+        this.loadBest();
+      },
+
+      // Handle keyboard input
+      handleKeyPress(e) {
+        if (this.isSolving || !this.gameActive) return;
+        const emptyIndex = this.getEmptyIndex();
+        const x = emptyIndex % this.size;
+        const y = Math.floor(emptyIndex / this.size);
+        let targetId;
+        switch (e.key) {
+          case 'ArrowUp':
+            targetId = (y + 1) * this.size + x;
+            break;
+          case 'ArrowDown':
+            targetId = (y - 1) * this.size + x;
+            break;
+          case 'ArrowLeft':
+            targetId = y * this.size + x + 1;
+            break;
+          case 'ArrowRight':
+            targetId = y * this.size + x - 1;
+            break;
+          default:
+            return;
+        }
+        if (targetId >= 0 && targetId < this.size * this.size && this.canMove(targetId)) {
+          this.moveTile(targetId);
+          this.tiles[targetId].focus();
+        }
       }
-      render();
-      clearInterval(timer);
-      moves = 0;
-      seconds = 0;
-      timerDisplay.textContent = 'Time: 0s';
-      movesDisplay.textContent = 'Moves: 0';
-      setTimeout(() => {
-        isSolving = false;
-        gameActive = true;
-      }, 100);
-    }
+    };
 
-    function toggleBorder() {
-      container.classList.toggle('bordered');
-    }
-
-    container.addEventListener('click', e => {
+    // Event listeners
+    game.container.addEventListener('click', e => {
       const tile = e.target;
-      const tileId = tiles.indexOf(tile);
-      if (tileId !== -1 && canMove(tileId)) {
-        moveTile(tileId);
+      const tileId = game.tiles.indexOf(tile);
+      if (tileId !== -1 && game.canMove(tileId)) {
+        game.moveTile(tileId);
       }
     });
 
-    function restartPuzzle() {
-      isSolving = false;
-      gameActive = true;
-      allowWin = true;
-      createTiles();
-      shuffleTiles();
-      render();
-      startTimer();
-      container.classList.remove('win-animation');
-      loadBest();
-    }
+    document.addEventListener('keydown', e => game.handleKeyPress(e));
 
-    restartPuzzle();
+    // Handle preview image errors
+    game.previewImage.onerror = () => {
+      console.warn(`Preview image ${game.currentImage} not found, using fallback.`);
+      game.currentImage = CONFIG.fallbackImage;
+      game.previewImage.src = game.currentImage;
+      game.setTileBackgrounds();
+    };
+
+    // Initialize game
+    game.init();
   </script>
 </body>
 </html>
