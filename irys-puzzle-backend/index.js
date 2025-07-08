@@ -1,3 +1,4 @@
+// backend/index.js
 const express = require('express');
 const mongoose = require('mongoose');
 const axios = require('axios');
@@ -14,14 +15,13 @@ app.use(cors({ origin: 'https://irys-puzzle.vercel.app' }));
 mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true
-})
-.then(() => console.log('Connected to MongoDB'))
-.catch(err => console.error('MongoDB error:', err));
+}).then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('MongoDB error:', err));
 
 const userSchema = new mongoose.Schema({
     discordId: { type: String, required: true, unique: true },
     username: { type: String, required: true },
-    avatar: String,
+    avatar: { type: String },
     points: { type: Number, default: 0 }
 });
 
@@ -34,13 +34,11 @@ app.get('/auth/discord', (req, res) => {
 });
 
 app.get('/auth/discord/callback', async (req, res) => {
-    const { code, state } = req.query;
-    const safeState = state && state.startsWith('/') ? state : '';
-
+    const { code } = req.query;
     if (!code) return res.status(400).send('No code provided');
 
     try {
-        const tokenResponse = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
+        const tokenRes = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
             client_id: process.env.DISCORD_CLIENT_ID,
             client_secret: process.env.DISCORD_CLIENT_SECRET,
             grant_type: 'authorization_code',
@@ -50,29 +48,26 @@ app.get('/auth/discord/callback', async (req, res) => {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
-        const { access_token } = tokenResponse.data;
+        const { access_token } = tokenRes.data;
 
-        const userResponse = await axios.get('https://discord.com/api/users/@me', {
+        const userRes = await axios.get('https://discord.com/api/users/@me', {
             headers: { Authorization: `Bearer ${access_token}` }
         });
 
-        const { id: discordId, username, avatar } = userResponse.data;
+        const { id: discordId, username, avatar } = userRes.data;
 
         let user = await User.findOne({ discordId });
         if (!user) {
             user = new User({ discordId, username, avatar });
             await user.save();
-        } else {
-            user.username = username;
-            user.avatar = avatar;
-            await user.save();
         }
 
-        const token = jwt.sign({ discordId, username }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        const redirectUrl = `https://irys-puzzle.vercel.app${safeState}?discordId=${discordId}&username=${encodeURIComponent(username)}&token=${token}`;
+        const token = jwt.sign({ discordId, username, avatar }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const redirectUrl = `https://irys-puzzle.vercel.app?discordId=${discordId}&username=${encodeURIComponent(username)}&token=${token}`;
         res.redirect(redirectUrl);
-    } catch (error) {
-        console.error('OAuth error:', error.response ? error.response.data : error.message);
+
+    } catch (err) {
+        console.error('OAuth error:', err.response?.data || err.message);
         res.status(500).send('Authentication failed');
     }
 });
