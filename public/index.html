@@ -177,6 +177,7 @@
       <span id="best">Best: -</span>
     </div>
     <button id="loginButton">Login with Discord</button>
+    <button id="startButton">Start Puzzle</button>
     <button onclick="game.restart()">Restart</button>
     <button onclick="game.solve()">Solve</button>
     <button onclick="game.toggleBorder()">Toggle Border</button>
@@ -187,317 +188,349 @@
   <audio id="moveSound" src="move.mp3"></audio>
 
   <script>
-  const CONFIG = {
-    backendUrl: 'https://irys-puzzle-backend.vercel.app',
-    imagePath: 'images/image',
-    fallbackImage: 'images/fallback.png',
-    imageCount: 16,
-    discordClientId: '1382641531810353172'
-  };
+    const CONFIG = {
+      backendUrl: 'https://irys-puzzle-backend.vercel.app',
+      imagePath: 'images/image',
+      fallbackImage: 'images/fallback.png',
+      imageCount: 16,
+      discordClientId: '1382641531810353172'
+    };
 
-  const game = {
-    container: document.getElementById('puzzle'),
-    timerDisplay: document.getElementById('timer'),
-    movesDisplay: document.getElementById('moves'),
-    bestDisplay: document.getElementById('best'),
-    difficultySelect: document.getElementById('difficulty'),
-    previewImage: document.getElementById('preview'),
-    moveSound: document.getElementById('moveSound'),
-    loginButton: document.getElementById('loginButton'),
-    size: 4,
-    tiles: [],
-    timer: null,
-    seconds: 0,
-    moves: 0,
-    isSolving: false,
-    gameActive: false,
-    solvedOnce: false,
-    currentUser: null,
-    currentImage: '',
-    audioAvailable: false,
+    const game = {
+      container: document.getElementById('puzzle'),
+      timerDisplay: document.getElementById('timer'),
+      movesDisplay: document.getElementById('moves'),
+      bestDisplay: document.getElementById('best'),
+      difficultySelect: document.getElementById('difficulty'),
+      previewImage: document.getElementById('preview'),
+      moveSound: document.getElementById('moveSound'),
+      loginButton: document.getElementById('loginButton'),
+      startButton: document.getElementById('startButton'),
+      size: 4,
+      tiles: [],
+      timer: null,
+      seconds: 0,
+      moves: 0,
+      isSolving: false,
+      gameActive: false,
+      solvedOnce: false,
+      currentUser: null,
+      currentImage: '',
+      audioAvailable: false,
 
-    async init() {
-      this.moveSound.oncanplaythrough = () => this.audioAvailable = true;
-      this.moveSound.load();
+      async init() {
+        this.moveSound.oncanplaythrough = () => this.audioAvailable = true;
+        this.moveSound.load();
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const discordId = urlParams.get('discordId');
-      const username = urlParams.get('username');
-      const token = urlParams.get('token');
-      if (discordId && username && token) {
-        this.currentUser = { discordId, username: decodeURIComponent(username), token };
-        alert(`Welcome to IRyS Puzzle Mania, ${this.currentUser.username}!`);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        this.loginButton.textContent = `Logout: ${this.currentUser.username}`;
-        this.loginButton.onclick = () => {
-          this.currentUser = null;
-          this.loginButton.textContent = 'Login with Discord';
+        const urlParams = new URLSearchParams(window.location.search);
+        const discordId = urlParams.get('discordId');
+        const username = urlParams.get('username');
+        const token = urlParams.get('token');
+        if (discordId && username && token) {
+          this.currentUser = { discordId, username: decodeURIComponent(username), token };
+          alert(`Welcome to IRyS Puzzle Mania, ${this.currentUser.username}!`);
+          window.history.replaceState({}, document.title, window.location.pathname);
+          this.loginButton.textContent = `Logout: ${this.currentUser.username}`;
+          this.loginButton.onclick = () => {
+            this.currentUser = null;
+            this.loginButton.textContent = 'Login with Discord';
+            this.loginButton.onclick = () => this.loginWithDiscord();
+            window.location.href = '/';
+          };
+        } else {
           this.loginButton.onclick = () => this.loginWithDiscord();
-          window.location.href = '/';
-        };
-      } else {
-        this.loginButton.onclick = () => this.loginWithDiscord();
-      }
+        }
 
-      await this.restart();
-    },
+        this.startButton.onclick = () => this.start();
 
-    loginWithDiscord() {
-      const redirectUri = encodeURIComponent(`${CONFIG.backendUrl}/auth/discord/callback`);
-      const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${CONFIG.discordClientId}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
-      window.location.href = authUrl;
-    },
-
-    loadBest() {
-      const best = JSON.parse(localStorage.getItem(`IRySPuzzleBest${this.size}`)) || { time: Infinity, moves: Infinity };
-      this.bestDisplay.textContent = best.time === Infinity ? 'Best: -' : `Best: ${best.time}s, ${best.moves}m`;
-    },
-
-    saveBest() {
-      const currentBest = JSON.parse(localStorage.getItem(`IRySPuzzleBest${this.size}`)) || { time: Infinity, moves: Infinity };
-      if (this.seconds < currentBest.time || (this.seconds === currentBest.time && this.moves < currentBest.moves)) {
-        localStorage.setItem(`IRySPuzzleBest${this.size}`, JSON.stringify({ time: this.seconds, moves: this.moves }));
+        this.isSolving = false;
+        this.gameActive = false;
+        this.solvedOnce = false;
+        this.size = parseInt(this.difficultySelect.value);
+        this.createTiles();
+        await this.setRandomImage();
+        this.render();
         this.loadBest();
-      }
-    },
+        this.container.classList.remove('win-animation');
+        this.startButton.style.display = 'inline-block';
+      },
 
-    startTimer() {
-      clearInterval(this.timer);
-      this.seconds = 0;
-      this.moves = 0;
-      this.timerDisplay.textContent = 'Time: 0s';
-      this.movesDisplay.textContent = 'Moves: 0';
-      this.timer = setInterval(() => {
-        this.seconds++;
-        this.timerDisplay.textContent = `Time: ${this.seconds}s`;
-      }, 1000);
-    },
+      start() {
+        this.shuffleTiles();
+        this.render();
+        this.startTimer();
+        this.gameActive = true;
+        this.startButton.style.display = 'none';
+      },
 
-    async setRandomImage() {
-      return new Promise(resolve => {
-        const imageNumber = Math.floor(Math.random() * CONFIG.imageCount) + 1;
-        this.currentImage = `${CONFIG.imagePath}${imageNumber}.png`;
-        const img = new Image();
-        img.src = this.currentImage;
-        img.onerror = () => {
+      loginWithDiscord() {
+        const redirectUri = encodeURIComponent(`${CONFIG.backendUrl}/auth/discord/callback`);
+        const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${CONFIG.discordClientId}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
+        window.location.href = authUrl;
+      },
+
+      loadBest() {
+        const best = JSON.parse(localStorage.getItem(`IRySPuzzleBest${this.size}`)) || { time: Infinity, moves: Infinity };
+        this.bestDisplay.textContent = best.time === Infinity ? 'Best: -' : `Best: ${best.time}s, ${best.moves}m`;
+      },
+
+      saveBest() {
+        const currentBest = JSON.parse(localStorage.getItem(`IRySPuzzleBest${this.size}`)) || { time: Infinity, moves: Infinity };
+        if (this.seconds < currentBest.time || (this.seconds === currentBest.time && this.moves < currentBest.moves)) {
+          localStorage.setItem(`IRySPuzzleBest${this.size}`, JSON.stringify({ time: this.seconds, moves: this.moves }));
+          this.loadBest();
+        }
+      },
+
+      startTimer() {
+        clearInterval(this.timer);
+        this.seconds = 0;
+        this.moves = 0;
+        this.timerDisplay.textContent = 'Time: 0s';
+        this.movesDisplay.textContent = 'Moves: 0';
+        this.timer = setInterval(() => {
+          this.seconds++;
+          this.timerDisplay.textContent = `Time: ${this.seconds}s`;
+        }, 1000);
+      },
+
+      async setRandomImage() {
+        return new Promise(resolve => {
+          const imageNumber = Math.floor(Math.random() * CONFIG.imageCount) + 1;
+          this.currentImage = `${CONFIG.imagePath}${imageNumber}.png`;
+          const img = new Image();
+          img.src = this.currentImage;
+          img.onerror = () => {
+            this.currentImage = CONFIG.fallbackImage;
+            this.previewImage.src = this.currentImage;
+            this.setTileBackgrounds();
+            resolve();
+          };
+          img.onload = () => {
+            this.previewImage.src = this.currentImage;
+            this.setTileBackgrounds();
+            resolve();
+          };
+        });
+      },
+
+      setTileBackgrounds() {
+        if (!this.currentImage) {
           this.currentImage = CONFIG.fallbackImage;
           this.previewImage.src = this.currentImage;
-          this.setTileBackgrounds();
-          resolve();
-        };
-        img.onload = () => {
-          this.previewImage.src = this.currentImage;
-          this.setTileBackgrounds();
-          resolve();
-        };
-      });
-    },
-
-    setTileBackgrounds() {
-      this.tiles.forEach((tile, index) => {
-        if (!tile.classList.contains('empty')) {
-          const row = Math.floor(index / this.size);
-          const col = index % this.size;
-          tile.style.backgroundImage = `url('${this.currentImage}')`;
-          tile.style.backgroundSize = `${this.size * 100}% ${this.size * 100}%`;
-          tile.style.backgroundPosition = `${(col * 100) / (this.size - 1)}% ${(row * 100) / (this.size - 1)}%`;
-        } else {
-          tile.style.backgroundImage = 'none';
         }
-      });
-    },
-
-    createTiles() {
-      this.size = parseInt(this.difficultySelect.value);
-      const totalTiles = this.size * this.size;
-      this.container.style.gridTemplateColumns = `repeat(${this.size}, 1fr)`;
-      this.container.style.gridTemplateRows = `repeat(${this.size}, 1fr)`;
-      this.container.style.setProperty('--bg-size', `${this.size * 100}% ${this.size * 100}%`);
-      this.tiles = [];
-      for (let i = 0; i < totalTiles; i++) {
-        const tile = document.createElement('div');
-        tile.classList.add('tile');
-        tile.dataset.id = i;
-        tile.tabIndex = 0;
-        this.tiles.push(tile);
-      }
-      this.tiles[totalTiles - 1].classList.add('empty');
-    },
-
-    shuffleTiles() {
-      const movable = this.tiles.filter(tile => !tile.classList.contains('empty'));
-      for (let i = 0; i < movable.length * 10; i++) {
-        const j1 = Math.floor(Math.random() * movable.length);
-        const j2 = Math.floor(Math.random() * movable.length);
-        [movable[j1], movable[j2]] = [movable[j2], movable[j1]];
-      }
-      const emptyTile = this.tiles.find(tile => tile.classList.contains('empty'));
-      this.tiles = [...movable, emptyTile];
-      let attempts = 0;
-      while (!this.isSolvable() && attempts < 100) {
-        const j1 = Math.floor(Math.random() * (movable.length - 1));
-        const j2 = Math.floor(Math.random() * (movable.length - 1));
-        [movable[j1], movable[j2]] = [movable[j2], movable[j1]];
-        this.tiles = [...movable, emptyTile];
-        attempts++;
-      }
-      this.setTileBackgrounds();
-    },
-
-    isSolvable() {
-      let inversionCount = 0;
-      const flatTiles = this.tiles.map(tile => parseInt(tile.dataset.id));
-      for (let i = 0; i < flatTiles.length - 1; i++) {
-        if (flatTiles[i] === flatTiles.length - 1) continue;
-        for (let j = i + 1; j < flatTiles.length; j++) {
-          if (flatTiles[j] === flatTiles.length - 1) continue;
-          if (flatTiles[i] > flatTiles[j]) inversionCount++;
-        }
-      }
-      const emptyIndex = this.getEmptyIndex();
-      const emptyRow = Math.floor(emptyIndex / this.size) + 1;
-      return this.size % 2 === 1
-        ? inversionCount % 2 === 0
-        : (inversionCount + emptyRow) % 2 === 0;
-    },
-
-    render() {
-      this.container.innerHTML = '';
-      this.tiles.forEach(tile => this.container.appendChild(tile));
-    },
-
-    getEmptyIndex() {
-      return this.tiles.findIndex(tile => tile.classList.contains('empty'));
-    },
-
-    canMove(tileId) {
-      const emptyIndex = this.getEmptyIndex();
-      const x1 = tileId % this.size, y1 = Math.floor(tileId / this.size);
-      const x2 = emptyIndex % this.size, y2 = Math.floor(emptyIndex / this.size);
-      return Math.abs(x1 - x2) + Math.abs(y1 - y2) === 1;
-    },
-
-    moveTile(tileId) {
-      if (this.isSolving || !this.gameActive || this.solvedOnce) return;
-      const emptyIndex = this.getEmptyIndex();
-      [this.tiles[tileId], this.tiles[emptyIndex]] = [this.tiles[emptyIndex], this.tiles[tileId]];
-      this.moves++;
-      this.movesDisplay.textContent = `Moves: ${this.moves}`;
-      if (this.audioAvailable) {
-        this.moveSound.currentTime = 0;
-        this.moveSound.play().catch(() => {});
-      }
-      this.render();
-      this.checkWin();
-    },
-
-    async checkWin() {
-      if (this.isSolving || !this.gameActive || this.solvedOnce) return;
-      const correct = this.tiles.every((tile, i) => (
-        tile.dataset.id == i && !tile.classList.contains('empty') ||
-        tile.classList.contains('empty') && i === this.size * this.size - 1
-      ));
-      if (correct) {
-        clearInterval(this.timer);
-        this.container.classList.add('win-animation');
-        const pointsMap = { 3: 10, 4: 20, 5: 30 };
-        const pointsEarned = pointsMap[this.size];
-        setTimeout(async () => {
-          alert(`🎉 Solved! Time: ${this.seconds}s, Moves: ${this.moves}, Points: +${pointsEarned}`);
-          this.saveBest();
-          this.container.classList.remove('win-animation');
-          this.gameActive = false;
-          this.solvedOnce = true;
-          if (this.currentUser) {
-            try {
-              const res = await fetch(`${CONFIG.backendUrl}/update-points`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${this.currentUser.token}`
-                },
-                body: JSON.stringify({ discordId: this.currentUser.discordId, points: pointsEarned })
-              });
-              const data = await res.json();
-              if (data.success) alert(`Total points: ${data.points}`);
-              else alert(`Error: ${data.message || 'Unknown'}`);
-            } catch (err) {
-              alert('Point update failed.');
-            }
+        this.tiles.forEach((tile, index) => {
+          if (!tile.classList.contains('empty')) {
+            const row = Math.floor(index / this.size);
+            const col = index % this.size;
+            tile.style.backgroundImage = `url('${this.currentImage}')`;
+            tile.style.backgroundSize = `${this.size * 100}% ${this.size * 100}%`;
+            tile.style.backgroundPosition = `${(col * 100) / (this.size - 1)}% ${(row * 100) / (this.size - 1)}%`;
+          } else {
+            tile.style.backgroundImage = 'none';
           }
-        }, 600);
+        });
+      },
+
+      createTiles() {
+        this.size = parseInt(this.difficultySelect.value);
+        const totalTiles = this.size * this.size;
+        this.container.style.gridTemplateColumns = `repeat(${this.size}, 1fr)`;
+        this.container.style.gridTemplateRows = `repeat(${this.size}, 1fr)`;
+        this.container.style.setProperty('--bg-size', `${this.size * 100}% ${this.size * 100}%`);
+        this.tiles = [];
+        for (let i = 0; i < totalTiles; i++) {
+          const tile = document.createElement('div');
+          tile.classList.add('tile');
+          tile.dataset.id = i;
+          tile.tabIndex = 0;
+          this.tiles.push(tile);
+        }
+        this.tiles[totalTiles - 1].classList.add('empty');
+      },
+
+      shuffleTiles() {
+        const movable = this.tiles.filter(tile => !tile.classList.contains('empty'));
+        for (let i = 0; i < movable.length * 10; i++) {
+          const j1 = Math.floor(Math.random() * movable.length);
+          const j2 = Math.floor(Math.random() * movable.length);
+          [movable[j1], movable[j2]] = [movable[j2], movable[j1]];
+        }
+        const emptyTile = this.tiles.find(tile => tile.classList.contains('empty'));
+        this.tiles = [...movable, emptyTile];
+        let attempts = 0;
+        while (!this.isSolvable() && attempts < 100) {
+          const j1 = Math.floor(Math.random() * movable.length);
+          const j2 = Math.floor(Math.random() * movable.length);
+          [movable[j1], movable[j2]] = [movable[j2], movable[j1]];
+          this.tiles = [...movable, emptyTile];
+          attempts++;
+        }
+      },
+
+      isSolvable() {
+        let inversionCount = 0;
+        const flatTiles = this.tiles.map(tile => parseInt(tile.dataset.id));
+        for (let i = 0; i < flatTiles.length - 1; i++) {
+          if (flatTiles[i] === flatTiles.length - 1) continue;
+          for (let j = i + 1; j < flatTiles.length; j++) {
+            if (flatTiles[j] === flatTiles.length - 1) continue;
+            if (flatTiles[i] > flatTiles[j]) inversionCount++;
+          }
+        }
+        const emptyIndex = this.getEmptyIndex();
+        const emptyRow = Math.floor(emptyIndex / this.size) + 1;
+        return this.size % 2 === 1
+          ? inversionCount % 2 === 0
+          : (inversionCount + emptyRow) % 2 === 0;
+      },
+
+      render() {
+        this.container.innerHTML = '';
+        this.tiles.forEach(tile => this.container.appendChild(tile));
+      },
+
+      getEmptyIndex() {
+        return this.tiles.findIndex(tile => tile.classList.contains('empty'));
+      },
+
+      canMove(tileId) {
+        const emptyIndex = this.getEmptyIndex();
+        const x1 = tileId % this.size, y1 = Math.floor(tileId / this.size);
+        const x2 = emptyIndex % this.size, y2 = Math.floor(emptyIndex / this.size);
+        return Math.abs(x1 - x2) + Math.abs(y1 - y2) === 1;
+      },
+
+      moveTile(tileId) {
+        if (this.isSolving || !this.gameActive) return;
+        const emptyIndex = this.getEmptyIndex();
+        [this.tiles[tileId], this.tiles[emptyIndex]] = [this.tiles[emptyIndex], this.tiles[tileId]];
+        this.moves++;
+        this.movesDisplay.textContent = `Moves: ${this.moves}`;
+        if (this.audioAvailable) {
+          this.moveSound.currentTime = 0;
+          this.moveSound.play().catch(() => {});
+        }
+        this.render();
+        this.checkWin();
+      },
+
+      async checkWin() {
+        if (this.isSolving || !this.gameActive) return;
+        const isCorrect = this.tiles.every((tile, i) => (
+          tile.dataset.id == i && !tile.classList.contains('empty') ||
+          tile.classList.contains('empty') && i === this.size * this.size - 1
+        ));
+        if (isCorrect && !this.solvedOnce) {
+          this.solvedOnce = true;
+          clearInterval(this.timer);
+          this.container.classList.add('win-animation');
+          const pointsMap = { 3: 10, 4: 20, 5: 30 };
+          const pointsEarned = pointsMap[this.size];
+          setTimeout(async () => {
+            alert(`🎉 You solved IRyS's puzzle! Time: ${this.seconds}s, Moves: ${this.moves}, Points: +${pointsEarned}`);
+            this.saveBest();
+            this.container.classList.remove('win-animation');
+            this.gameActive = false;
+            if (this.currentUser) {
+              try {
+                const response = await fetch(`${CONFIG.backendUrl}/update-points`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.currentUser.token}`
+                  },
+                  body: JSON.stringify({ discordId: this.currentUser.discordId, points: pointsEarned })
+                });
+                const data = await response.json();
+                if (data.success) {
+                  alert(`Total points: ${data.points}`);
+                } else {
+                  alert(`Error awarding points: ${data.message || 'Unknown error'}`);
+                }
+              } catch (err) {
+                alert('Failed to update points. Try again later.');
+              }
+            }
+          }, 600);
+        }
+      },
+
+      solve() {
+        this.isSolving = true;
+        this.gameActive = false;
+        this.tiles.forEach((tile, i) => {
+          tile.dataset.id = i;
+          tile.classList.remove('empty');
+          if (i === this.size * this.size - 1) tile.classList.add('empty');
+        });
+        this.setTileBackgrounds();
+        this.render();
+        clearInterval(this.timer);
+        this.moves = 0;
+        this.seconds = 0;
+        this.timerDisplay.textContent = 'Time: 0s';
+        this.movesDisplay.textContent = 'Moves: 0';
+        setTimeout(() => {
+          this.isSolving = false;
+        }, 100);
+      },
+
+      toggleBorder() {
+        this.container.classList.toggle('bordered');
+      },
+
+      async restart() {
+        this.solvedOnce = false;
+        this.isSolving = false;
+        this.gameActive = true;
+        this.size = parseInt(this.difficultySelect.value);
+        this.createTiles();
+        await this.setRandomImage();
+        this.shuffleTiles();
+        this.render();
+        this.startTimer();
+        this.container.classList.remove('win-animation');
+        this.loadBest();
+      },
+
+      handleKeyPress(e) {
+        if (this.isSolving || !this.gameActive) return;
+        const emptyIndex = this.getEmptyIndex();
+        const x = emptyIndex % this.size;
+        const y = Math.floor(emptyIndex / this.size);
+        let targetId;
+        switch (e.key) {
+          case 'ArrowUp': targetId = (y + 1) * this.size + x; break;
+          case 'ArrowDown': targetId = (y - 1) * this.size + x; break;
+          case 'ArrowLeft': targetId = y * this.size + x + 1; break;
+          case 'ArrowRight': targetId = y * this.size + x - 1; break;
+          default: return;
+        }
+        if (targetId >= 0 && targetId < this.size * this.size && this.canMove(targetId)) {
+          this.moveTile(targetId);
+          this.tiles[targetId].focus();
+        }
       }
-    },
+    };
 
-    solve() {
-      this.isSolving = true;
-      this.gameActive = false;
-      this.tiles.forEach((tile, i) => {
-        tile.dataset.id = i;
-        tile.classList.remove('empty');
-        if (i === this.size * this.size - 1) tile.classList.add('empty');
-      });
-      this.setTileBackgrounds();
-      this.render();
-      clearInterval(this.timer);
-      this.moves = 0;
-      this.seconds = 0;
-      this.movesDisplay.textContent = 'Moves: 0';
-      this.timerDisplay.textContent = 'Time: 0s';
-    },
-
-    toggleBorder() {
-      this.container.classList.toggle('bordered');
-    },
-
-    async restart() {
-      this.isSolving = false;
-      this.gameActive = true;
-      this.solvedOnce = false;
-      this.createTiles();
-      await this.setRandomImage();
-      this.shuffleTiles();
-      this.render();
-      this.startTimer();
-      this.container.classList.remove('win-animation');
-      this.loadBest();
-    },
-
-    handleKeyPress(e) {
-      if (this.isSolving || !this.gameActive || this.solvedOnce) return;
-      const emptyIndex = this.getEmptyIndex();
-      const x = emptyIndex % this.size;
-      const y = Math.floor(emptyIndex / this.size);
-      let targetId;
-      switch (e.key) {
-        case 'ArrowUp': targetId = (y + 1) * this.size + x; break;
-        case 'ArrowDown': targetId = (y - 1) * this.size + x; break;
-        case 'ArrowLeft': targetId = y * this.size + x + 1; break;
-        case 'ArrowRight': targetId = y * this.size + x - 1; break;
-        default: return;
+    game.container.addEventListener('click', e => {
+      const tile = e.target;
+      const tileId = game.tiles.indexOf(tile);
+      if (tileId !== -1 && game.canMove(tileId)) {
+        game.moveTile(tileId);
       }
-      if (targetId >= 0 && targetId < this.size * this.size && this.canMove(targetId)) {
-        this.moveTile(targetId);
-        this.tiles[targetId].focus();
-      }
-    }
-  };
+    });
 
-  game.container.addEventListener('click', e => {
-    const tile = e.target;
-    const tileId = game.tiles.indexOf(tile);
-    if (tileId !== -1 && game.canMove(tileId)) {
-      game.moveTile(tileId);
-    }
-  });
+    document.addEventListener('keydown', e => game.handleKeyPress(e));
 
-  document.addEventListener('keydown', e => game.handleKeyPress(e));
-  game.previewImage.onerror = () => {
-    game.currentImage = CONFIG.fallbackImage;
-    game.previewImage.src = game.currentImage;
-    game.setTileBackgrounds();
-  };
-  game.init();
-</script>
+    game.previewImage.onerror = () => {
+      game.currentImage = CONFIG.fallbackImage;
+      game.previewImage.src = game.currentImage;
+      game.setTileBackgrounds();
+    };
+
+    game.init();
+  </script>
 </body>
 </html>
