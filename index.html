@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>IRyS Puzzle Mania</title>
-  <link rel="icon" href="favicon.png" type="image/png"/>
+  <link rel="icon" href="/favicon.png" type="image/png"/>
 
   <meta property="og:title" content="IRyS Puzzle Mania" />
   <meta property="og:description" content="Solve dazzling IRyS-themed puzzles!" />
@@ -12,6 +12,8 @@
   <meta property="og:url" content="https://irys-puzzle.vercel.app/" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet"/>
 
   <style>
     body {
@@ -113,7 +115,7 @@
       transition: transform 0.2s ease, box-shadow 0.2s;
     }
 
-    .tile:hover {
+    .tile:hover:not(.empty) {
       transform: scale(1.03);
       box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
     }
@@ -132,6 +134,44 @@
         transform: scale(1.06);
         box-shadow: 0 0 20px rgba(255, 77, 166, 0.8);
       }
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: #fff;
+      color: #2e004f;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 500px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-content button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      background: #ff4da6;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .modal-content button:hover {
+      background: #e6008c;
     }
 
     @media (max-width: 600px) {
@@ -162,13 +202,13 @@
     <button onclick="restartPuzzle()">Restart</button>
     <button onclick="solvePuzzle()">Solve</button>
     <button onclick="toggleBorder()">Toggle Border</button>
-    <button onclick="showLeaderboard()">Leaderboard</button>
+    <button onclick="window.location.href='leaderboard.html'">Leaderboard</button>
   </div>
 
   <div class="puzzle-container" id="puzzle"></div>
-  <audio id="moveSound" src="move.mp3"></audio>
-  
-<script>
+  <audio id="moveSound" src="/move.mp3"></audio>
+
+  <script>
     const container = document.getElementById('puzzle');
     const timerDisplay = document.getElementById('timer');
     const movesDisplay = document.getElementById('moves');
@@ -195,7 +235,7 @@
 
     previewImage.onerror = () => {
       console.error(`Error loading preview image: ${currentImage}`);
-      alert(`Error: '${currentImage}' not found. Ensure images image1.png to image20.png are in the root directory.`);
+      alert(`Error: '${currentImage}' not found. Ensure images image1.png to image9.png are in the /images directory.`);
     };
 
     moveSound.onerror = () => {
@@ -205,9 +245,8 @@
     function loginWithDiscord() {
       const clientId = '1382641531810353172';
       const redirectUri = encodeURIComponent('https://irys-puzzle-backend.vercel.app/auth/discord/callback');
-      const scope = encodeURIComponent('identify');
-      const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
-      window.location.href = discordAuthUrl;
+      const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
+      window.location.href = authUrl;
     }
 
     window.onload = () => {
@@ -224,10 +263,8 @@
           currentUser = null;
           loginButton.textContent = 'Login with Discord';
           loginButton.onclick = loginWithDiscord;
-          document.getElementById('user')?.remove();
           window.location.href = '/';
         };
-        document.querySelector('.controls').insertAdjacentHTML('beforeend', `<span id="user">Logged in as: ${decodeURIComponent(username)}</span>`);
       } else {
         loginButton.onclick = loginWithDiscord;
       }
@@ -260,17 +297,13 @@
     }
 
     function setRandomImage() {
-      const imageNumber = Math.floor(Math.random() * 20) + 1;
-      currentImage = `/image${imageNumber}.png`; // Images in root directory
+      const imageNumber = Math.floor(Math.random() * 9) + 1; // 9 images for now
+      currentImage = `/images/image${imageNumber}.png`; // Updated to public/images/
       console.log('Attempting to load image:', currentImage);
       previewImage.src = currentImage;
       previewImage.onload = () => {
         console.log('Image loaded successfully:', currentImage);
         setTileBackgrounds();
-      };
-      previewImage.onerror = () => {
-        console.error(`Failed to load ${currentImage}. Ensure images are in the root directory.`);
-        alert(`Error: '${currentImage}' not found. Ensure images image1.png to image20.png are in the root directory.`);
       };
     }
 
@@ -332,7 +365,7 @@
 
     function isSolvable() {
       let inversionCount = 0;
-      const flatTiles = tiles.map(tile => parseInt(tile.dataset.id)); // Fixed typo: flatTls to flatTiles
+      const flatTiles = tiles.map(tile => parseInt(tile.dataset.id));
       for (let i = 0; i < flatTiles.length - 1; i++) {
         for (let j = i + 1; j < flatTiles.length; j++) {
           if (flatTiles[i] && flatTiles[j] && flatTiles[i] > flatTiles[j]) {
@@ -373,9 +406,10 @@
       moveSound.currentTime = 0;
       moveSound.play().catch(err => console.warn("Audio play failed:", err));
       render();
+      checkWin();
     }
 
-    async function checkWin() {
+    function checkWin() {
       if (isSolving || !gameActive || !allowWin) return;
       const isCorrect = tiles.every((tile, i) => (
         tile.dataset.id == i && !tile.classList.contains('empty') ||
@@ -417,26 +451,10 @@
       }
     }
 
-    async function showLeaderboard() {
-      try {
-        const response = await fetch('https://irys-puzzle-backend.vercel.app/leaderboard');
-        const leaderboard = await response.json();
-        let leaderboardText = '🏆 IRyS Puzzle Mania Leaderboard 🏆\n';
-        leaderboard.forEach((user, index) => {
-          leaderboardText += `${index + 1}. ${user.username}: ${user.points} points\n`;
-        });
-        alert(leaderboardText);
-      } catch (error) {
-        console.error('Error fetching leaderboard:', error);
-        alert('Failed to load leaderboard.');
-      }
-    }
-
     function solvePuzzle() {
       isSolving = true;
       gameActive = false;
       allowWin = false;
-      // Reset tiles to solved state with current image
       tiles.forEach((tile, i) => {
         tile.dataset.id = i;
         tile.classList.remove('empty');
@@ -444,12 +462,11 @@
           tile.classList.add('empty');
         }
       });
-      // Ensure currentImage is used and not overwritten
       if (currentImage) {
         setTileBackgrounds();
       } else {
         console.warn('No currentImage available, using default.');
-        setRandomImage(); // Fallback if image is missing
+        setRandomImage();
       }
       render();
       clearInterval(timer);
@@ -472,7 +489,6 @@
       const tileId = tiles.indexOf(tile);
       if (tileId !== -1 && canMove(tileId)) {
         moveTile(tileId);
-        checkWin();
       }
     });
 
