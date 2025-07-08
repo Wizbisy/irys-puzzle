@@ -98,7 +98,7 @@
   <div class="leaderboard" id="leaderboard"></div>
   <div class="controls">
     <button onclick="window.location.href='index.html'">Back to Game</button>
-    <button id="loginButton" onclick="loginWithDiscord()">Login with Discord</button>
+    <button id="loginButton">Login with Discord</button>
   </div>
 
   <script>
@@ -130,30 +130,27 @@
         loadLeaderboard();
       } else {
         loginButton.onclick = loginWithDiscord;
+        leaderboardDiv.textContent = 'Please log in to view the leaderboard.';
       }
     };
 
-    function loadLeaderboard() {
-      if (!currentUser) {
-        leaderboardDiv.textContent = 'Please log in to view the leaderboard.';
-        return;
-      }
-      fetch('https://irys-puzzle-backend.vercel.app/leaderboard', {
-        headers: { 'Authorization': `Bearer ${currentUser.token}` }
-      })
-        .then(response => response.json())
-        .then(data => {
-          let html = '<table class="leaderboard-table"><tr><th>Rank</th><th>Username</th><th>Points</th></tr>';
-          data.forEach((user, index) => {
-            html += `<tr><td>${index + 1}</td><td>${decodeURIComponent(user.username)}</td><td>${user.points}</td></tr>`;
-          });
-          html += '</table>';
-          leaderboardDiv.innerHTML = html;
-        })
-        .catch(error => {
-          console.error('Error fetching leaderboard:', error);
-          leaderboardDiv.textContent = 'Failed to load leaderboard.';
+    async function loadLeaderboard() {
+      if (!currentUser) return;
+      try {
+        const response = await fetch('https://irys-puzzle-backend.vercel.app/leaderboard', {
+          headers: { 'Authorization': `Bearer ${currentUser.token}` }
         });
+        const leaderboard = await response.json();
+        let html = '<table class="leaderboard-table"><tr><th>Rank</th><th>Username</th><th>Points</th></tr>';
+        leaderboard.forEach((user, index) => {
+          html += `<tr><td>${index + 1}</td><td>${decodeURIComponent(user.username)}</td><td>${user.points}</td></tr>`;
+        });
+        html += '</table>';
+        leaderboardDiv.innerHTML = html;
+      } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        leaderboardDiv.textContent = 'Failed to load leaderboard.';
+      }
     }
   </script>
 </body>
