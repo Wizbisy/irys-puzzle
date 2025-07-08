@@ -218,7 +218,7 @@
       audioAvailable: false,
 
       // Initialize game
-      init() {
+      async init() {
         // Check audio availability
         this.moveSound.oncanplaythrough = () => { this.audioAvailable = true; };
         this.moveSound.onerror = () => { console.warn("Warning: 'move.mp3' not found."); };
@@ -243,7 +243,7 @@
         } else {
           this.loginButton.onclick = () => this.loginWithDiscord();
         }
-        this.restart();
+        await this.restart();
       },
 
       // Discord login
@@ -283,22 +283,26 @@
 
       // Set random image with validation
       async setRandomImage() {
-        const imageNumber = Math.floor(Math.random() * CONFIG.imageCount) + 1;
-        this.currentImage = `${CONFIG.imagePath}${imageNumber}.png`;
-        console.log('Attempting to load image:', this.currentImage);
+        return new Promise(resolve => {
+          const imageNumber = Math.floor(Math.random() * CONFIG.imageCount) + 1;
+          this.currentImage = `${CONFIG.imagePath}${imageNumber}.png`;
+          console.log('Attempting to load image:', this.currentImage);
 
-        const img = new Image();
-        img.src = this.currentImage;
-        img.onerror = () => {
-          console.warn(`Image ${this.currentImage} not found, using fallback.`);
-          this.currentImage = CONFIG.fallbackImage;
-          this.previewImage.src = this.currentImage;
-          this.setTileBackgrounds();
-        };
-        img.onload = () => {
-          this.previewImage.src = this.currentImage;
-          this.setTileBackgrounds();
-        };
+          const img = new Image();
+          img.src = this.currentImage;
+          img.onerror = () => {
+            console.warn(`Image ${this.currentImage} not found, using fallback.`);
+            this.currentImage = CONFIG.fallbackImage;
+            this.previewImage.src = this.currentImage;
+            this.setTileBackgrounds();
+            resolve();
+          };
+          img.onload = () => {
+            this.previewImage.src = this.currentImage;
+            this.setTileBackgrounds();
+            resolve();
+          };
+        });
       },
 
       // Set tile backgrounds
@@ -337,29 +341,45 @@
           this.tiles.push(tile);
         }
         this.tiles[totalTiles - 1].classList.add('empty');
-        if (!this.currentImage) {
-          this.setRandomImage();
-        } else {
-          this.previewImage.src = this.currentImage;
-          this.setTileBackgrounds();
-        }
       },
 
-      // Shuffle tiles
+      // Shuffle tiles with enhanced randomization
       shuffleTiles() {
         const movable = this.tiles.filter(tile => !tile.classList.contains('empty'));
-        for (let i = movable.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [movable[i], movable[j]] = [movable[j], movable[i]];
+        // Perform multiple random swaps for better randomization
+        for (let i = 0; i < movable.length * 10; i++) { // Increased swaps
+          const j1 = Math.floor(Math.random() * movable.length);
+          const j2 = Math.floor(Math.random() * movable.length);
+          [movable[j1], movable[j2]] = [movable[j2], movable[j1]];
         }
         const emptyTile = this.tiles.find(tile => tile.classList.contains('empty'));
         this.tiles = [...movable, emptyTile];
-        while (!this.isSolvable()) {
-          const i = Math.floor(Math.random() * (movable.length - 1));
-          const j = Math.floor(Math.random() * (movable.length - 1));
-          [movable[i], movable[j]] = [movable[j], movable[i]];
+        // Ensure solvability
+        let attempts = 0;
+        const maxAttempts = 100;
+        while (!this.isSolvable() && attempts < maxAttempts) {
+          const j1 = Math.floor(Math.random() * (movable.length - 1));
+          const j2 = Math.floor(Math.random() * (movable.length - 1));
+          [movable[j1], movable[j2]] = [movable[j2], movable[j1]];
           this.tiles = [...movable, emptyTile];
+          attempts++;
         }
+        if (attempts >= maxAttempts) {
+          console.warn('Failed to find solvable configuration after max attempts, reshuffling.');
+          this.shuffleTiles(); // Recursive retry
+          return;
+        }
+        // Verify puzzle is not solved
+        const isSolved = this.tiles.every((tile, i) => (
+          tile.dataset.id == i && !tile.classList.contains('empty') ||
+          tile.classList.contains('empty') && i === this.size * this.size - 1
+        ));
+        if (isSolved) {
+          console.log('Puzzle is solved after shuffle, reshuffling.');
+          this.shuffleTiles(); // Reshuffle if accidentally solved
+          return;
+        }
+        console.log('Shuffled tiles:', this.tiles.map(tile => tile.dataset.id));
         this.setTileBackgrounds();
       },
 
@@ -378,9 +398,11 @@
         }
         const emptyIndex = this.getEmptyIndex();
         const emptyRow = Math.floor(emptyIndex / this.size) + 1;
-        return this.size % 2 === 1
+        const isSolvable = this.size % 2 === 1
           ? inversionCount % 2 === 0
           : (inversionCount + emptyRow) % 2 === 0;
+        console.log(`Inversions: ${inversionCount}, Empty row: ${emptyRow}, Solvable: ${isSolvable}`);
+        return isSolvable;
       },
 
       // Render tiles
@@ -427,7 +449,9 @@
         if (isCorrect) {
           clearInterval(this.timer);
           this.container.classList.add('win-animation');
-          const pointsMap = { 3: 10, 4: 20, 5: 30 };
+          const pointsMap = { 3: 10 pride
+
+System: 4: 20, 5: 30 };
           const pointsEarned = pointsMap[this.size];
           setTimeout(async () => {
             alert(`🎉 You solved IRyS's puzzle! Time: ${this.seconds}s, Moves: ${this.moves}, Points: +${pointsEarned}`);
@@ -489,15 +513,17 @@
       },
 
       // Restart game
-      restart() {
+      async restart() {
         this.isSolving = false;
         this.gameActive = true;
         this.createTiles();
+        await this.setRandomImage(); // Wait for image to load
         this.shuffleTiles();
         this.render();
         this.startTimer();
         this.container.classList.remove('win-animation');
         this.loadBest();
+        console.log('Puzzle restarted, solvable:', this.isSolvable());
       },
 
       // Handle keyboard input
