@@ -63,6 +63,14 @@
       background: rgba(255, 255, 255, 0.1);
     }
 
+    .pfp {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+
     .controls {
       margin-top: 20px;
       display: flex;
@@ -118,14 +126,26 @@
       const discordId = urlParams.get('discordId');
       const username = urlParams.get('username');
       const token = urlParams.get('token');
+
       if (discordId && username && token) {
         currentUser = { discordId, username, token };
-        loginButton.textContent = `Logout: ${decodeURIComponent(username)}`;
+        localStorage.setItem('irysUser', JSON.stringify(currentUser));
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else {
+        const saved = localStorage.getItem('irysUser');
+        if (saved) {
+          currentUser = JSON.parse(saved);
+        }
+      }
+
+      if (currentUser) {
+        loginButton.textContent = `Logout: ${decodeURIComponent(currentUser.username)}`;
         loginButton.onclick = () => {
+          localStorage.removeItem('irysUser');
           currentUser = null;
           loginButton.textContent = 'Login with Discord';
           loginButton.onclick = loginWithDiscord;
-          window.location.href = 'leaderboard.html';
+          leaderboardDiv.textContent = 'Please log in to view the leaderboard.';
         };
         loadLeaderboard();
       } else {
@@ -141,9 +161,16 @@
           headers: { 'Authorization': `Bearer ${currentUser.token}` }
         });
         const leaderboard = await response.json();
-        let html = '<table class="leaderboard-table"><tr><th>Rank</th><th>Username</th><th>Points</th></tr>';
+        let html = '<table class="leaderboard-table"><tr><th>Rank</th><th>User</th><th>Points</th></tr>';
         leaderboard.forEach((user, index) => {
-          html += `<tr><td>${index + 1}</td><td>${decodeURIComponent(user.username)}</td><td>${user.points}</td></tr>`;
+          const pfpUrl = `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar || 'a_undefined'}.png`;
+          const safeUsername = decodeURIComponent(user.username || 'Unknown');
+          html += `
+            <tr>
+              <td>${index + 1}</td>
+              <td><img src="${pfpUrl}" class="pfp" onerror="this.style.display='none'" alt="pfp"/> ${safeUsername}</td>
+              <td>${user.points}</td>
+            </tr>`;
         });
         html += '</table>';
         leaderboardDiv.innerHTML = html;
