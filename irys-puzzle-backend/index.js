@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema({
   discordId: { type: String, required: true, unique: true },
   username: { type: String, required: true },
   points: { type: Number, default: 0 },
-  avatar: { type: String } // new field for pfp
+  avatar: { type: String } 
 });
 
 const User = mongoose.model('User', userSchema);
@@ -58,8 +58,8 @@ app.get('/auth/discord/callback', async (req, res) => {
       user = new User({ discordId, username, avatar });
       await user.save();
     } else {
-      user.username = username; // update in case of name change
-      user.avatar = avatar;     // update avatar
+      user.username = username; 
+      user.avatar = avatar;     
       await user.save();
     }
 
