@@ -13,20 +13,9 @@
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
 
-  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet"/>
 
   <style>
-    .irys-logo {
-    font-family: 'Anton', sans-serif;
-    font-size: 72px;
-    font-weight: 900;
-    letter-spacing: -0.05em;
-    transform: skewX(-5deg);
-    color: #fff;
-    margin-bottom: 10px;
-    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-    }
-
     body {
       background: linear-gradient(135deg, #2e004f, #ff4da6);
       display: flex;
@@ -84,6 +73,412 @@
       color: #2e004f;
       font-weight: 500;
     }
+
+    .controls button {
+      background: #ff4da6;
+      color: #fff;
+      font-weight: bold;
+    }
+
+    .controls button:hover {
+      background: #e6008c;
+      transform: translateY(-3px);
+    }
+
+    .stats {
+      display: flex;
+      gap: 25px;
+      font-size: 1.1rem;
+      font-weight: 500;
+    }
+
+    .puzzle-container {
+      display: grid;
+      width: 90vw;
+      max-width: 500px;
+      aspect-ratio: 1 / 1;
+      gap: 3px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      background: #000;
+      transition: border 0.3s;
+    }
+
+    .puzzle-container.bordered {
+      border: 4px solid #ff4da6;
+    }
+
+    .tile {
+      background-size: var(--bg-size);
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s;
+      user-select: none;
+    }
+
+    .tile:hover:not(.empty) {
+      transform: scale(1.03);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .tile:focus {
+      outline: 2px solid #ff4da6;
+    }
+
+    .empty {
+      background: #1a1a1a;
+      cursor: default;
+    }
+
+    .win-animation .tile {
+      animation: winGlow 0.6s infinite alternate;
+    }
+
+    @keyframes winGlow {
+      to {
+        transform: scale(1.06);
+        box-shadow: 0 0 20px rgba(255, 77, 166, 0.8);
+      }
+    }
+
+    @media (max-width: 600px) {
+      h1 { font-size: 1.6rem; }
+      .preview { width: 160px; }
+      .controls { flex-direction: column; gap: 10px; }
+      .stats { font-size: 0.95rem; gap: 15px; }
+      .puzzle-container { max-width: 350px; }
+    }
+
+    @media (max-width: 400px) {
+      .puzzle-container { max-width: 280px; }
+      .controls select, .controls button { padding: 10px 18px; font-size: 0.9rem; }
+    }
+
+    @media (max-width: 320px) {
+      .puzzle-container { max-width: 240px; }
+      h1 { font-size: 1.4rem; }
+      .preview { width: 140px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>IRyS Puzzle Mania</h1>
+  <img id="preview" alt="Puzzle Preview" class="preview"/>
+
+  <div class="controls">
+    <select id="difficulty" onchange="game.restart()">
+      <option value="3">Easy (3x3)</option>
+      <option value="4" selected>Medium (4x4)</option>
+      <option value="5">Hard (5x5)</option>
+    </select>
+    <div class="stats">
+      <span id="timer">Time: 0s</span>
+      <span id="moves">Moves: 0</span>
+      <span id="best">Best: -</span>
+    </div>
+    <button id="startButton">Start Puzzle</button>
+    <button onclick="game.restart()">Restart</button>
+    <button onclick="game.solve()">Solve</button>
+    <button onclick="game.toggleBorder()">Toggle Border</button>
+    <button onclick="window.location.href='leaderboard.html'">View Leaderboard</button>
+  </div>
+
+  <div class="puzzle-container" id="puzzle"></div>
+  <audio id="moveSound" src="move.mp3"></audio>
+
+  <script>
+    const CONFIG = {
+      imagePath: 'images/image',
+      fallbackImage: 'images/fallback.png',
+      imageCount: 16
+    };
+
+    const game = {
+      container: document.getElementById('puzzle'),
+      timerDisplay: document.getElementById('timer'),
+      movesDisplay: document.getElementById('moves'),
+      bestDisplay: document.getElementById('best'),
+      difficultySelect: document.getElementById('difficulty'),
+      previewImage: document.getElementById('preview'),
+      moveSound: document.getElementById('moveSound'),
+      startButton: document.getElementById('startButton'),
+      size: 4,
+      tiles: [],
+      timer: null,
+      seconds: 0,
+      moves: 0,
+      isSolving: false,
+      gameActive: false,
+      solvedOnce: false,
+      currentImage: '',
+      audioAvailable: false,
+
+      async init() {
+        this.moveSound.oncanplaythrough = () => this.audioAvailable = true;
+        this.moveSound.load();
+
+        this.startButton.onclick = () => this.start();
+        this.isSolving = false;
+        this.gameActive = false;
+        this.solvedOnce = false;
+        this.size = parseInt(this.difficultySelect.value);
+        this.createTiles();
+        await this.setRandomImage();
+        this.render();
+        this.loadBest();
+        this.container.classList.remove('win-animation');
+        this.startButton.style.display = 'inline-block';
+      },
+
+      start() {
+        this.shuffleTiles();
+        this.render();
+        this.startTimer();
+        this.gameActive = true;
+        this.startButton.style.display = 'none';
+      },
+
+      loadBest() {
+        const best = JSON.parse(localStorage.getItem(`IRySPuzzleBest${this.size}`)) || { time: Infinity, moves: Infinity };
+        this.bestDisplay.textContent = best.time === Infinity ? 'Best: -' : `Best: ${best.time}s, ${best.moves}m`;
+      },
+
+      saveBest() {
+        const currentBest = JSON.parse(localStorage.getItem(`IRySPuzzleBest${this.size}`)) || { time: Infinity, moves: Infinity };
+        if (this.seconds < currentBest.time || (this.seconds === currentBest.time && this.moves < currentBest.moves)) {
+          localStorage.setItem(`IRySPuzzleBest${this.size}`, JSON.stringify({ time: this.seconds, moves: this.moves }));
+          this.loadBest();
+        }
+      },
+
+      startTimer() {
+        clearInterval(this.timer);
+        this.seconds = 0;
+        this.moves = 0;
+        this.timerDisplay.textContent = 'Time: 0s';
+        this.movesDisplay.textContent = 'Moves: 0';
+        this.timer = setInterval(() => {
+          this.seconds++;
+          this.timerDisplay.textContent = `Time: ${this.seconds}s`;
+        }, 1000);
+      },
+
+      async setRandomImage() {
+        return new Promise(resolve => {
+          const imageNumber = Math.floor(Math.random() * CONFIG.imageCount) + 1;
+          this.currentImage = `${CONFIG.imagePath}${imageNumber}.png`;
+          const img = new Image();
+          img.src = this.currentImage;
+          img.onerror = () => {
+            this.currentImage = CONFIG.fallbackImage;
+            this.previewImage.src = this.currentImage;
+            this.setTileBackgrounds();
+            resolve();
+          };
+          img.onload = () => {
+            this.previewImage.src = this.currentImage;
+            this.setTileBackgrounds();
+            resolve();
+          };
+        });
+      },
+
+      setTileBackgrounds() {
+        this.tiles.forEach((tile, index) => {
+          if (!tile.classList.contains('empty')) {
+            const row = Math.floor(index / this.size);
+            const col = index % this.size;
+            tile.style.backgroundImage = `url('${this.currentImage}')`;
+            tile.style.backgroundSize = `${this.size * 100}% ${this.size * 100}%`;
+            tile.style.backgroundPosition = `${(col * 100) / (this.size - 1)}% ${(row * 100) / (this.size - 1)}%`;
+          } else {
+            tile.style.backgroundImage = 'none';
+          }
+        });
+      },
+
+      createTiles() {
+        this.size = parseInt(this.difficultySelect.value);
+        const totalTiles = this.size * this.size;
+        this.container.style.gridTemplateColumns = `repeat(${this.size}, 1fr)`;
+        this.container.style.gridTemplateRows = `repeat(${this.size}, 1fr)`;
+        this.container.style.setProperty('--bg-size', `${this.size * 100}% ${this.size * 100}%`);
+        this.tiles = [];
+        for (let i = 0; i < totalTiles; i++) {
+          const tile = document.createElement('div');
+          tile.classList.add('tile');
+          tile.dataset.id = i;
+          tile.tabIndex = 0;
+          this.tiles.push(tile);
+        }
+        this.tiles[totalTiles - 1].classList.add('empty');
+      },
+
+      shuffleTiles() {
+        const movable = this.tiles.filter(tile => !tile.classList.contains('empty'));
+        for (let i = 0; i < movable.length * 10; i++) {
+          const j1 = Math.floor(Math.random() * movable.length);
+          const j2 = Math.floor(Math.random() * movable.length);
+          [movable[j1], movable[j2]] = [movable[j2], movable[j1]];
+        }
+        const emptyTile = this.tiles.find(tile => tile.classList.contains('empty'));
+        this.tiles = [...movable, emptyTile];
+        let attempts = 0;
+        while (!this.isSolvable() && attempts < 100) {
+          const j1 = Math.floor(Math.random() * movable.length);
+          const j2 = Math.floor(Math.random() * movable.length);
+          [movable[j1], movable[j2]] = [movable[j2], movable[j1]];
+          this.tiles = [...movable, emptyTile];
+          attempts++;
+        }
+      },
+
+      isSolvable() {
+        let inversionCount = 0;
+        const flatTiles = this.tiles.map(tile => parseInt(tile.dataset.id));
+        for (let i = 0; i < flatTiles.length - 1; i++) {
+          if (flatTiles[i] === flatTiles.length - 1) continue;
+          for (let j = i + 1; j < flatTiles.length; j++) {
+            if (flatTiles[j] === flatTiles.length - 1) continue;
+            if (flatTiles[i] > flatTiles[j]) inversionCount++;
+          }
+        }
+        const emptyIndex = this.getEmptyIndex();
+        const emptyRow = Math.floor(emptyIndex / this.size) + 1;
+        return this.size % 2 === 1
+          ? inversionCount % 2 === 0
+          : (inversionCount + emptyRow) % 2 === 0;
+      },
+
+      render() {
+        this.container.innerHTML = '';
+        this.tiles.forEach(tile => this.container.appendChild(tile));
+      },
+
+      getEmptyIndex() {
+        return this.tiles.findIndex(tile => tile.classList.contains('empty'));
+      },
+
+      canMove(tileId) {
+        const emptyIndex = this.getEmptyIndex();
+        const x1 = tileId % this.size, y1 = Math.floor(tileId / this.size);
+        const x2 = emptyIndex % this.size, y2 = Math.floor(emptyIndex / this.size);
+        return Math.abs(x1 - x2) + Math.abs(y1 - y2) === 1;
+      },
+
+      moveTile(tileId) {
+        if (this.isSolving || !this.gameActive) return;
+        const emptyIndex = this.getEmptyIndex();
+        [this.tiles[tileId], this.tiles[emptyIndex]] = [this.tiles[emptyIndex], this.tiles[tileId]];
+        this.moves++;
+        this.movesDisplay.textContent = `Moves: ${this.moves}`;
+        if (this.audioAvailable) {
+          this.moveSound.currentTime = 0;
+          this.moveSound.play().catch(() => {});
+        }
+        this.render();
+        this.checkWin();
+      },
+
+      async checkWin() {
+        if (this.isSolving || !this.gameActive) return;
+        const isCorrect = this.tiles.every((tile, i) => (
+          tile.dataset.id == i && !tile.classList.contains('empty') ||
+          tile.classList.contains('empty') && i === this.size * this.size - 1
+        ));
+        if (isCorrect && !this.solvedOnce) {
+          this.solvedOnce = true;
+          clearInterval(this.timer);
+          this.container.classList.add('win-animation');
+          const pointsMap = { 3: 10, 4: 20, 5: 30 };
+          const pointsEarned = pointsMap[this.size];
+          setTimeout(() => {
+            alert(`🎉 You solved IRyS's puzzle! Time: ${this.seconds}s, Moves: ${this.moves}, Points: +${pointsEarned}`);
+            this.saveBest();
+            this.container.classList.remove('win-animation');
+            this.gameActive = false;
+          }, 600);
+        }
+      },
+
+      solve() {
+        this.isSolving = true;
+        this.gameActive = false;
+        this.tiles.forEach((tile, i) => {
+          tile.dataset.id = i;
+          tile.classList.remove('empty');
+          if (i === this.size * this.size - 1) tile.classList.add('empty');
+        });
+        this.setTileBackgrounds();
+        this.render();
+        clearInterval(this.timer);
+        this.moves = 0;
+        this.seconds = 0;
+        this.timerDisplay.textContent = 'Time: 0s';
+        this.movesDisplay.textContent = 'Moves: 0';
+        setTimeout(() => {
+          this.isSolving = false;
+        }, 100);
+      },
+
+      toggleBorder() {
+        this.container.classList.toggle('bordered');
+      },
+
+      async restart() {
+        this.solvedOnce = false;
+        this.isSolving = false;
+        this.gameActive = true;
+        this.size = parseInt(this.difficultySelect.value);
+        this.createTiles();
+        await this.setRandomImage();
+        this.shuffleTiles();
+        this.render();
+        this.startTimer();
+        this.container.classList.remove('win-animation');
+        this.loadBest();
+      },
+
+      handleKeyPress(e) {
+        if (this.isSolving || !this.gameActive) return;
+        const emptyIndex = this.getEmptyIndex();
+        const x = emptyIndex % this.size;
+        const y = Math.floor(emptyIndex / this.size);
+        let targetId;
+        switch (e.key) {
+          case 'ArrowUp': targetId = (y + 1) * this.size + x; break;
+          case 'ArrowDown': targetId = (y - 1) * this.size + x; break;
+          case 'ArrowLeft': targetId = y * this.size + x + 1; break;
+          case 'ArrowRight': targetId = y * this.size + x - 1; break;
+          default: return;
+        }
+        if (targetId >= 0 && targetId < this.size * this.size && this.canMove(targetId)) {
+          this.moveTile(targetId);
+          this.tiles[targetId].focus();
+        }
+      }
+    };
+
+    game.container.addEventListener('click', e => {
+      const tile = e.target;
+      const tileId = game.tiles.indexOf(tile);
+      if (tileId !== -1 && game.canMove(tileId)) {
+        game.moveTile(tileId);
+      }
+    });
+
+    document.addEventListener('keydown', e => game.handleKeyPress(e));
+
+    game.previewImage.onerror = () => {
+      game.currentImage = CONFIG.fallbackImage;
+      game.previewImage.src = game.currentImage;
+      game.setTileBackgrounds();
+    };
+
+    game.init();
+  </script>
+</body>
+</html>    }
 
     .controls button {
       background: #ff4da6;
