@@ -176,7 +176,6 @@
       <span id="moves">Moves: 0</span>
       <span id="best">Best: -</span>
     </div>
-    <button id="loginButton">Login with Discord</button>
     <button id="startButton">Start Puzzle</button>
     <button onclick="game.restart()">Restart</button>
     <button onclick="game.solve()">Solve</button>
@@ -189,11 +188,9 @@
 
   <script>
     const CONFIG = {
-      backendUrl: 'https://irys-puzzle-backend.vercel.app',
       imagePath: 'images/image',
       fallbackImage: 'images/fallback.png',
-      imageCount: 16,
-      discordClientId: '1382641531810353172'
+      imageCount: 16
     };
 
     const game = {
@@ -204,7 +201,6 @@
       difficultySelect: document.getElementById('difficulty'),
       previewImage: document.getElementById('preview'),
       moveSound: document.getElementById('moveSound'),
-      loginButton: document.getElementById('loginButton'),
       startButton: document.getElementById('startButton'),
       size: 4,
       tiles: [],
@@ -214,7 +210,6 @@
       isSolving: false,
       gameActive: false,
       solvedOnce: false,
-      currentUser: null,
       currentImage: '',
       audioAvailable: false,
 
@@ -222,27 +217,7 @@
         this.moveSound.oncanplaythrough = () => this.audioAvailable = true;
         this.moveSound.load();
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const discordId = urlParams.get('discordId');
-        const username = urlParams.get('username');
-        const token = urlParams.get('token');
-        if (discordId && username && token) {
-          this.currentUser = { discordId, username: decodeURIComponent(username), token };
-          alert(`Welcome to IRyS Puzzle Mania, ${this.currentUser.username}!`);
-          window.history.replaceState({}, document.title, window.location.pathname);
-          this.loginButton.textContent = `Logout: ${this.currentUser.username}`;
-          this.loginButton.onclick = () => {
-            this.currentUser = null;
-            this.loginButton.textContent = 'Login with Discord';
-            this.loginButton.onclick = () => this.loginWithDiscord();
-            window.location.href = '/';
-          };
-        } else {
-          this.loginButton.onclick = () => this.loginWithDiscord();
-        }
-
         this.startButton.onclick = () => this.start();
-
         this.isSolving = false;
         this.gameActive = false;
         this.solvedOnce = false;
@@ -261,12 +236,6 @@
         this.startTimer();
         this.gameActive = true;
         this.startButton.style.display = 'none';
-      },
-
-      loginWithDiscord() {
-        const redirectUri = encodeURIComponent(`${CONFIG.backendUrl}/auth/discord/callback`);
-        const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${CONFIG.discordClientId}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
-        window.location.href = authUrl;
       },
 
       loadBest() {
@@ -315,10 +284,6 @@
       },
 
       setTileBackgrounds() {
-        if (!this.currentImage) {
-          this.currentImage = CONFIG.fallbackImage;
-          this.previewImage.src = this.currentImage;
-        }
         this.tiles.forEach((tile, index) => {
           if (!tile.classList.contains('empty')) {
             const row = Math.floor(index / this.size);
@@ -427,31 +392,11 @@
           this.container.classList.add('win-animation');
           const pointsMap = { 3: 10, 4: 20, 5: 30 };
           const pointsEarned = pointsMap[this.size];
-          setTimeout(async () => {
+          setTimeout(() => {
             alert(`🎉 You solved IRyS's puzzle! Time: ${this.seconds}s, Moves: ${this.moves}, Points: +${pointsEarned}`);
             this.saveBest();
             this.container.classList.remove('win-animation');
             this.gameActive = false;
-            if (this.currentUser) {
-              try {
-                const response = await fetch(`${CONFIG.backendUrl}/update-points`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.currentUser.token}`
-                  },
-                  body: JSON.stringify({ discordId: this.currentUser.discordId, points: pointsEarned })
-                });
-                const data = await response.json();
-                if (data.success) {
-                  alert(`Total points: ${data.points}`);
-                } else {
-                  alert(`Error awarding points: ${data.message || 'Unknown error'}`);
-                }
-              } catch (err) {
-                alert('Failed to update points. Try again later.');
-              }
-            }
           }, 600);
         }
       },
